@@ -14,25 +14,17 @@ field='Field2'
 wavelength=25.2
 
 #normalized exposure time map cutoff
-tmapnormcut=0.3
+tmapnormcut=0.5
 
 #use mask2
-usemask2=True
-
-#limits for mask 2
-m2x1=0
-m2x2=360
-m2y1=275
-m2y2=360
+usemask2=False
+# list of regions to define mask2 in form [y1:y2,x1,x2]
+#m2limits=[[290,370,0,370]
 
 #use mask3
 usemask3=False
-
-#limits for mask 3
-m3x1=0
-m3x2=360
-m3y1=275
-m3y2=360
+# list of regions to define mask3 in form [y1:y2,x1,x2]
+#m3limits=[[290,370,0,370]
 
 #bkg esitmator box size
 bkgbox=20

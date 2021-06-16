@@ -1,7 +1,5 @@
 #config file for running different fields Contains all relevant parameters to be loaded in by the jupyter notebook
 
-import numpy
-
 #data path
 dpath='C:/Users/mhankins1/Documents/SofiaLegacyProgram/SOFIA_Cycle7_Data/SgrBandNearby'
 dpathalt='E:\Documents\SofiaLegacyProgram\CAL_files\CAL_R'
@@ -18,33 +16,15 @@ wavelength=25.2
 #normalized exposure time map cutoff
 tmapnormcut=0.1
 
-#use mask2
+#use mask2 - applied to first segmentation map
 usemask2=True
-
-#limits for mask 2
-#m2x1=0
-#m2x2=330
-#m2y1=250
-#m2y2=300
-
-mask2=np.zeros(np.shape(mask))  #mask 2 is applied to the first segmentation map instance for source detection
-mask2[290:370,0:370]=1
-mask2[0:370,290:380]=1
-mask2[0:30,0:370]=1
-mask2[0:370,0:50]=1
-
+# list of regions to define mask2 in form [y1:y2,x1,x2]
+m2limits=[[290,370,0,370],[0,370,290,380],[0,30,0,370],[0,370,0,50]]
 
 #use mask3
-usemask3=True
-
-#limits for mask 3
-#m3x1=0
-#m3x2=300
-#m3y1=0
-#m3y2=70
-
-mask3=np.zeros(np.shape(mask))  #mask 3 is applied to the deblended segmentation map for source detection - this may or may not be needed if the first 2 masks work ok
-#mask3[0:330,0:70]=1
+usemask3=False
+# list of regions to define mask3 in form [y1:y2,x1,x2]
+#m3limits=[[290,370,0,370]
 
 #bkg esitmator box size
 bkgbox=20

@@ -18,21 +18,13 @@ tmapnormcut=0.5
 
 #use mask2
 usemask2=True
-
-#limits for mask 2
-m2x1=0
-m2x2=330
-m2y1=250
-m2y2=300
+# list of regions to define mask2 in form [y1:y2,x1,x2]
+m2limits=[[0,330,250,300]]
 
 #use mask3
 usemask3=True
-
-#limits for mask 3
-m3x1=0
-m3x2=300
-m3y1=0
-m3y2=70
+# list of regions to define mask3 in form [y1:y2,x1,x2]
+m3limits=[[0,330,0,70]]
 
 #bkg esitmator box size
 bkgbox=20
