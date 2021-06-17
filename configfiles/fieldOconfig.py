@@ -5,16 +5,16 @@ dpath='C:/Users/mhankins1/Documents/SofiaLegacyProgram/SOFIA_Cycle7_Data/SgrAand
 dpathalt='E:\Documents\SofiaLegacyProgram\CAL_files\CAL_C'
 
 #file name
-fname='F0589_FO_IMA_07018919_FORF253_CAL_0017-0049_Field_H.fits'
+fname='F0590_FO_IMA_07018926_FORF253_CAL_0057-0086_Field_O.fits'
 
 #Name of field
-field='FieldH'
+field='FieldO'
 
 #wavelength of data
 wavelength=25.2
 
 #normalized exposure time map cutoff
-tmapnormcut=0.5
+tmapnormcut=0.4
 
 #use mask2
 usemask2=False
