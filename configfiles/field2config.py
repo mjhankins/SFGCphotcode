@@ -27,4 +27,4 @@ usemask3=False
 #m3limits=[[290,370,0,370]
 
 #bkg esitmator box size
-bkgbox=20
+bkgbox=13
