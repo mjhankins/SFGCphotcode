@@ -286,12 +286,15 @@ for info in field._registry:
     IRAFsources = StarFinder(data_bkgsub_ma,mask=maskcombine)
 
     #plot data with apertures on detected sources
-    Dpositions = np.transpose((DAOsources['xcentroid'], DAOsources['ycentroid']))
-    Dapertures = CircularAperture(Dpositions, r=4.)
-    Ipositions = np.transpose((IRAFsources['xcentroid'], IRAFsources['ycentroid']))
-    Iapertures = CircularAperture(Ipositions, r=4.)
-    Spositions = np.transpose((tbl2['xcentroid'], tbl2['ycentroid']))
-    Sapertures = CircularAperture(Spositions, r=4.)
+    if DAOsources is not None:
+        Dpositions = np.transpose((DAOsources['xcentroid'], DAOsources['ycentroid']))
+        Dapertures = CircularAperture(Dpositions, r=4.)
+    if IRAFsources is not None:
+        Ipositions = np.transpose((IRAFsources['xcentroid'], IRAFsources['ycentroid']))
+        Iapertures = CircularAperture(Ipositions, r=4.)
+    if tbl2 is not None:
+        Spositions = np.transpose((tbl2['xcentroid'], tbl2['ycentroid']))
+        Sapertures = CircularAperture(Spositions, r=4.)
     
     '''
     norm = ImageNormalize(stretch=SqrtStretch())
@@ -314,7 +317,11 @@ for info in field._registry:
     
     
     #lets add ra, dec coordinates of sources to DAOsources table
-    Nsources=len(DAOsources['id'])
+    if DAOsources is None:
+        Nsources=0
+    else:
+        Nsources=len(DAOsources['id'])
+        
     scs=[]
     
     for i in range(0,Nsources):
@@ -323,15 +330,19 @@ for info in field._registry:
         sc=pixel_to_skycoord(xcoord,ycoord,wcsmap)
         scs.append(sc)
         
-    DAOsources['sky_centroid']=scs
+    if DAOsources is not None:
+        DAOsources['sky_centroid']=scs
     
-    #change format of columns to save fewer decimal places
-    for col in DAOsources.colnames:
-        if col!='sky_centroid': #skip sky centroid since its problematic in this context
-            DAOsources[col].info.format = '%.4G'
+        #change format of columns to save fewer decimal places
+        for col in DAOsources.colnames:
+            if col!='sky_centroid': #skip sky centroid since its problematic in this context
+                DAOsources[col].info.format = '%.4G'
             
     #print the number of sources found
-    print('Number of DAOfind sources found: ', len(DAOsources))
+    if DAOsources is not None:
+        print('Number of DAOfind sources found: ', len(DAOsources))
+    else:
+        print('Number of DAOfindSources found: 0')
     
     #write out the resulting table to file
     ascii.write(DAOsources, name+'_'+str(wavelength)+'um_dao.dat', overwrite=True)
@@ -363,15 +374,15 @@ for info in field._registry:
         f.truncate()
 
     
-    
-    #create ds9 region file for DAO sources
-    
-    sourcecoords=DAOsources['sky_centroid']
-    
     regions=[]
-    for i in range(0,len(sourcecoords)):
-        region = CircleSkyRegion(sourcecoords[i], radius)
-        regions.append(region)
+    #create ds9 region file for DAO sources
+    if DAOsources is not None:
+        sourcecoords=DAOsources['sky_centroid']
+    
+        
+        for i in range(0,len(sourcecoords)):
+            region = CircleSkyRegion(sourcecoords[i], radius)
+            regions.append(region)
         
     #write out region file
     write_ds9(regions, name+'_DF.reg')
