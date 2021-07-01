@@ -1,16 +1,19 @@
-#listing of the defined files
-def __dir__():
-    #return ['Field1', 'Field2', 'Field3', 'Field5', 'Field6', 'Field7', 'Field8', 'Field9', 'Field10', 'Field11', 'Field12', 'Field13', ]
-    return ['Mosaic25','Mosaic37','Field1', 'Field10', 'Field11', 'Field12', 'Field13', 'Field2', 'Field3', 'Field5', 'Field6', 'Field7', 'Field8', 'Field9', 'FieldA', 'FieldArchE', 'FieldArchNE', 'FieldArchNW', 'FieldArchSE', 'FieldArchW', 'FieldB', 'FieldC', 'FieldD', 'FieldE', 'FieldF', 'FieldG', 'FieldH', 'FieldHnorth', 'FieldHsouth', 'FieldI', 'FieldK', 'FieldL', 'FieldM', 'FieldO', 'FieldP', 'FieldQ', 'FieldR', 'FieldS', 'FieldT', 'FieldU', 'FieldV', 'FieldW', 'FieldX', 'FieldY']
+#configuration file for the photometry code
 
 #some common parameters for all files
 dpath='C:/Users/mhankins1/Documents/SofiaLegacyProgram/SOFIA_Cycle7_Data/all'  #path to data
 dpathalt='E:\Documents\SofiaLegacyProgram\CAL_files\CAL_C'   #alternate path to data
-detectsigma=3.0  #detection threshold sigma
-bkgbox=13 #size of box used for background model
+
 ds9path='C:\\Users\\mhankins1\\ds9.exe' #path to envoke ds9. Use None if you don't want to open ds9 at the end
 
+wavelength=25  #wavelength of the observations
+segdetsig=3.0  #detection threshold sigma for segmentation map
+finddetsig=3.5 #detection threshold sigma for daofinder and starfinder
+bkgbox=13 #size of box used for background model
+
 class field():
+    _registry = []
+    
     # init method or constructor 
     def __init__(self, name, filename,m1cut,m2lims,m3lims):
         self.name=name
@@ -18,22 +21,8 @@ class field():
         self.m1cut=m1cut
         self.m2lims=m2lims
         self.m3lims=m3lims
+        self._registry.append(self)
         
-
-Mosaic25=field(
-name='Mosaic25',  #name of field
-filename='F0217_FO_IMA_70030015_FORF253_MOS_0001-0348_final_MATT_Corrected.fits', #file name
-m1cut=0.01, # mask cutoff for normalized exposure time map
-m2lims=None, #list of manually defined masked regions in the form [y1,y2,x1,x2]
-m3lims=None) #additional mask if needed in the form [y1,y2,x1,x2]
-
-Mosaic37=field(
-name='Mosaic37',  #name of field
-filename='F0217_FO_IMA_70030016_FORF371_MOS_0001-0348_final_MATT_Corrected.fits', #file name
-m1cut=0.01, # mask cutoff for normalized exposure time map
-m2lims=None, #list of manually defined masked regions in the form [y1,y2,x1,x2]
-m3lims=None) #additional mask if needed in the form [y1,y2,x1,x2]
-
 #field1 parameters
 Field1=field(
 name='Field1',  #name of field
@@ -57,6 +46,7 @@ filename='F0595_FO_IMA_0701893_FORF253_CAL_0283-0303_FIELD_3.fits',
 m1cut=0.5,
 m2lims=[[0,150,250,300]],
 m3lims=None)
+
 
 #field5 parameters
 Field5=field(
@@ -388,3 +378,31 @@ filename='F0225_FO_IMA_70030017_FORF253_CAL_0004-0026_ArchW.fits',
 m1cut=0.5,
 m2lims=[[250,350,150,250]],
 m3lims=None)
+
+class mosaic():
+    _registry = []
+    
+    # init method or constructor 
+    def __init__(self, name, filename,m1cut,m2lims,m3lims):
+        self.name=name
+        self.filename=filename
+        self.m1cut=m1cut
+        self.m2lims=m2lims
+        self.m3lims=m3lims
+        self._registry.append(self)
+
+Mosaic25=mosaic(
+name='Mosaic25',  #name of field
+filename='F0217_FO_IMA_70030015_FORF253_MOS_0001-0348_final_MATT_Corrected.fits', #file name
+m1cut=0.01, # mask cutoff for normalized exposure time map
+m2lims=None, #list of manually defined masked regions in the form [y1,y2,x1,x2]
+m3lims=None) #additional mask if needed in the form [y1,y2,x1,x2]
+
+Mosaic37=mosaic(
+name='Mosaic37',  #name of field
+filename='F0217_FO_IMA_70030016_FORF371_MOS_0001-0348_final_MATT_Corrected.fits', #file name
+m1cut=0.01, # mask cutoff for normalized exposure time map
+m2lims=None, #list of manually defined masked regions in the form [y1,y2,x1,x2]
+m3lims=None) #additional mask if needed in the form [y1,y2,x1,x2]
+
+
