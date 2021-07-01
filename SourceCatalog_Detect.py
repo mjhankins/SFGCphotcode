@@ -39,7 +39,7 @@ from config import dpath, dpathalt, ds9path #import additional common paramters
 
 from config import *
 
-interactive=True
+interactive=False
 
 for info in field._registry:
     name=info.name
@@ -161,11 +161,12 @@ for info in field._registry:
             mask2[lim[0]:lim[1],lim[2]:lim[3]]=1
         segm.remove_masked_labels(mask2.astype('bool'))
 
-    
-    
     #lets take a look at deblending sources
-    segm_deblend = deblend_sources(data_bkgsub, segm, npixels=5,filter_kernel=kernel, nlevels=64,contrast=0.001)
-    
+    if segm is not None:
+        segm_deblend = deblend_sources(data_bkgsub, segm, npixels=5,filter_kernel=kernel, nlevels=64,contrast=0.001)
+    else:
+        segm_deblend=segm #if segm is empty pass it on to avoid errors
+
     #remove any sources that should be masked (mask3) 
     if m3lims is not None:
         mask3=np.zeros(np.shape(mask))
@@ -187,55 +188,56 @@ for info in field._registry:
 
     
     #now lets look at building a catalog from the deblended segmentation map
-    catwerr = SourceCatalog(data_bkgsub, segm_deblend,background=bkg,error=errormap,wcs=wcsmap)
-    columns=['label','xcentroid','ycentroid','sky_centroid','background_centroid', 'background_mean','background_sum','background','area',
+    if segm is not None:
+        catwerr = SourceCatalog(data_bkgsub, segm_deblend,background=bkg,error=errormap,wcs=wcsmap)
+        columns=['label','xcentroid','ycentroid','sky_centroid','background_centroid', 'background_mean','background_sum','background','area',
             'semimajor_sigma','semiminor_sigma','orientation', 'cxx','cxy','cyy','eccentricity','ellipticity','elongation',
             'fwhm','kron_flux','kron_fluxerr','kron_radius','segment_flux','segment_fluxerr']#,'kron_aperture']
-    tbl2 = catwerr.to_table(columns)
+        tbl2 = catwerr.to_table(columns)
     
-    #calculate statistics for background cutouts in table
-    segbkg_median=[]
-    segbkg_mean=[]
-    segbkg_std=[]
+        #calculate statistics for background cutouts in table
+        segbkg_median=[]
+        segbkg_mean=[]
+        segbkg_std=[]
     
-    #loop through each cutout and use sigma_cliped_stats to get mean, median, and std
-    for i in range (0,len(tbl2['background'])):
-        bkgdata=tbl2['background'][i]
-        meansc, median_sigclip, stdsc = sigma_clipped_stats(bkgdata)
-        segbkg_median.append(median_sigclip)
-        segbkg_mean.append(meansc)
-        segbkg_std.append(stdsc)
+        #loop through each cutout and use sigma_cliped_stats to get mean, median, and std
+        for i in range (0,len(tbl2['background'])):
+            bkgdata=tbl2['background'][i]
+            meansc, median_sigclip, stdsc = sigma_clipped_stats(bkgdata)
+            segbkg_median.append(median_sigclip)
+            segbkg_mean.append(meansc)
+            segbkg_std.append(stdsc)
     
-    #add the above calculated information to our table
-    tbl2['segbkg_mean_sc']=segbkg_mean
-    tbl2['segbkg_median_sc']=segbkg_median
-    tbl2['segbkg_std_sc']=segbkg_std  
+        #add the above calculated information to our table
+        tbl2['segbkg_mean_sc']=segbkg_mean
+        tbl2['segbkg_median_sc']=segbkg_median
+        tbl2['segbkg_std_sc']=segbkg_std  
     
-    #remove the 2d background array to tidy up the table
-    tbl2.remove_column('background')
+        #remove the 2d background array to tidy up the table
+        tbl2.remove_column('background')
 
     
-    #calculate noise stats
-    #sky noise from background
-    skynoise=np.sqrt(tbl2['segbkg_median_sc']*tbl2['area']/u.pix**2)
-    #replace any nan values with zero
-    sna=np.array(skynoise)
-    masknan=np.isnan(sna)
-    sna[masknan]=0.0
-    skynoise=sna**2
+        #calculate noise stats
+        #sky noise from background
+        skynoise=np.sqrt(tbl2['segbkg_median_sc']*tbl2['area']/u.pix**2)
+        #replace any nan values with zero
+        sna=np.array(skynoise)
+        masknan=np.isnan(sna)
+        sna[masknan]=0.0
+        skynoise=sna**2
     
-    #shot noise from the source
-    sourcenoise=tbl2['segment_flux']
+        #shot noise from the source
+        sourcenoise=tbl2['segment_flux']
     
-    #thermal noise from camera (from error map)
-    thermalnoise=tbl2['segment_fluxerr']
+        #thermal noise from camera (from error map)
+        thermalnoise=tbl2['segment_fluxerr']
     
-    #total noise
-    #totalnoise=np.sqrt(sourcenoise+thermalnoise+skynoise) #includes all noise sources
-    totalnoise=np.sqrt(thermalnoise+skynoise) #no shot noise -> For some reason this seems to work much better for the apertures. Need to think about why this is a bit more...
+        #total noise
+        #totalnoise=np.sqrt(sourcenoise+thermalnoise+skynoise) #includes all noise sources
+        totalnoise=np.sqrt(thermalnoise+skynoise) #no shot noise -> For some reason this seems to work much better for the apertures. Need to think about why this is a bit more...
     
-    #calculate SNR for the segments
-    tbl2['segmentSNR']=tbl2['segment_flux']/ totalnoise 
+        #calculate SNR for the segments
+        tbl2['segmentSNR']=tbl2['segment_flux']/ totalnoise 
     
     #change format of columns to save fewer decimal places
     for col in tbl2.colnames:
