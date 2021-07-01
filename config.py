@@ -1,10 +1,7 @@
 #listing of the defined files
 def __dir__():
     #return ['Field1', 'Field2', 'Field3', 'Field5', 'Field6', 'Field7', 'Field8', 'Field9', 'Field10', 'Field11', 'Field12', 'Field13', ]
-    return ['Field1', 'Field10', 'Field11', 'Field12', 'Field13', 'Field2', 'Field3', 'Field5', 'Field6', 'Field7', 'Field8', 'Field9', 'FieldA', 'FieldArchE', 'FieldArchNE', 'FieldArchNW', 'FieldArchSE', 'FieldArchW', 'FieldB', 'FieldC', 'FieldD', 'FieldE', 'FieldF', 'FieldG', 'FieldH', 'FieldHnorth', 'FieldHsouth', 'FieldI', 'FieldK', 'FieldL', 'FieldM', 'FieldO', 'FieldP', 'FieldQ', 'FieldR', 'FieldS', 'FieldT', 'FieldU', 'FieldV', 'FieldW', 'FieldX', 'FieldY']
-
-
-
+    return ['Mosaic25','Mosaic37','Field1', 'Field10', 'Field11', 'Field12', 'Field13', 'Field2', 'Field3', 'Field5', 'Field6', 'Field7', 'Field8', 'Field9', 'FieldA', 'FieldArchE', 'FieldArchNE', 'FieldArchNW', 'FieldArchSE', 'FieldArchW', 'FieldB', 'FieldC', 'FieldD', 'FieldE', 'FieldF', 'FieldG', 'FieldH', 'FieldHnorth', 'FieldHsouth', 'FieldI', 'FieldK', 'FieldL', 'FieldM', 'FieldO', 'FieldP', 'FieldQ', 'FieldR', 'FieldS', 'FieldT', 'FieldU', 'FieldV', 'FieldW', 'FieldX', 'FieldY']
 
 #some common parameters for all files
 dpath='C:/Users/mhankins1/Documents/SofiaLegacyProgram/SOFIA_Cycle7_Data/all'  #path to data
@@ -22,6 +19,20 @@ class field():
         self.m2lims=m2lims
         self.m3lims=m3lims
         
+
+Mosaic25=field(
+name='Mosaic25',  #name of field
+filename='F0217_FO_IMA_70030015_FORF253_MOS_0001-0348_final_MATT_Corrected.fits', #file name
+m1cut=0.01, # mask cutoff for normalized exposure time map
+m2lims=None, #list of manually defined masked regions in the form [y1,y2,x1,x2]
+m3lims=None) #additional mask if needed in the form [y1,y2,x1,x2]
+
+Mosaic37=field(
+name='Mosaic37',  #name of field
+filename='F0217_FO_IMA_70030016_FORF371_MOS_0001-0348_final_MATT_Corrected.fits', #file name
+m1cut=0.01, # mask cutoff for normalized exposure time map
+m2lims=None, #list of manually defined masked regions in the form [y1,y2,x1,x2]
+m3lims=None) #additional mask if needed in the form [y1,y2,x1,x2]
 
 #field1 parameters
 Field1=field(
@@ -377,16 +388,3 @@ filename='F0225_FO_IMA_70030017_FORF253_CAL_0004-0026_ArchW.fits',
 m1cut=0.5,
 m2lims=[[250,350,150,250]],
 m3lims=None)
-
-
-
-
-
-
-
-
-
-
-
-
-
