@@ -39,7 +39,7 @@ from config import dpath, dpathalt, ds9path #import additional common paramters
 
 from config import *
 
-interactive=False
+interactive=True
 
 for info in field._registry:
     name=info.name
@@ -409,7 +409,7 @@ for info in field._registry:
     #open ds9 and load in the region file that was just saved
     if interactive:
         if ds9path is not None:
-            p1=subprocess.Popen(ds9path+' '+filename+ ' -mode region -regions load '+name+'.reg') 
+            p1=subprocess.Popen(ds9path+' '+filename+ ' -mode region -regions load '+name+'.reg', shell=True) 
             p1.wait()
 
     

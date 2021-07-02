@@ -1,10 +1,10 @@
 #configuration file for the photometry code
 
 #some common parameters for all files
-dpath='C:/Users/mhankins1/Documents/SofiaLegacyProgram/SOFIA_Cycle7_Data/all'  #path to data
-dpathalt='E:\Documents\SofiaLegacyProgram\CAL_files\CAL_C'   #alternate path to data
+dpath='/home/matt/Data/SLP_GC_data/CAL_files/all'  #path to data
+dpathalt='C:/Users/mhankins1/Documents/SofiaLegacyProgram/SOFIA_Cycle7_Data/all'   #alternate path to data
 
-ds9path='C:\\Users\\mhankins1\\ds9.exe' #path to envoke ds9. Use None if you don't want to open ds9 at the end
+ds9path='/home/matt/anaconda3/bin/ds9' #path to envoke ds9. Use None if you don't want to open ds9 at the end. If you are unsure use the command 'which ds9' inside of your python environment to find the correct ds9 install. 
 
 wavelength=25  #wavelength of the observations - 25 or 37
 segdetsig=3.0  #detection threshold sigma for segmentation map
