@@ -254,13 +254,25 @@ for info in field._registry:
     ascii.write(tbl2, name+'_'+str(wavelength)+'um_seg.dat', overwrite=True)
       
     
-    #do statistics on image - daofind requires a single value for threshold rather than a 2d map
-    mean, median, std = sigma_clipped_stats(data_bkgsub, sigma=3.0)  
-    #print('Data mean, med, std: ',(mean, median, std))  
-    
-    #print('Seg. Threshold mean/median comparison: ', (np.mean(threshold)/3.,np.median(threshold)/3.))
+    #lets produce a new background map that's more optimized for point sources to use with DAOfind...
+    bkg_estimator_ps = MMMBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
+    bkg_data_ps = Background2D(data,(8, 8), filter_size=(3, 3),bkg_estimator=bkg_estimator_ps,edge_method='pad')
+    bkgps_rms=bkg_data_ps.background_rms
+    bkgps=bkg_data_ps.background 
 
+    #create background subtracted image
+    data_bkgsub_ps = data - bkgps
+    
+    #do statistics on image - daofind requires a single value for threshold rather than a 2d map
+    #print('Seg. Map mean/median Threshold/3.0 for comparison: ', (np.mean(threshold)/3.,np.median(threshold)/3.))
+
+    #mean, median, std = sigma_clipped_stats(data_bkgsub, sigma=3.0)  
+    #print('Seg Map Bkgsub data mean, med, std for comparison: ',(mean, median, std))  
+
+    mean, median, std = sigma_clipped_stats(data_bkgsub_ps, sigma=3.0)  
+    #print('DAOFind Data mean, med, std: ',(mean, median, std))
    
+
     #Before star finding lets mask areas in the image that were also masked in the seg. map
     
     #make high cut on edges of fields for DAOphot - note that this is quite a bit larger than the seg map
@@ -275,7 +287,7 @@ for info in field._registry:
         maskcombine=(mask4 == 1)
     
     #create masked array for the background subtracted data
-    data_bkgsub_ma = np.ma.masked_array(data_bkgsub, mask=maskcombine)
+    data_bkgsub_ma = np.ma.masked_array(data_bkgsub_ps, mask=maskcombine)
     
     
     #now run starfinder to find sources 
