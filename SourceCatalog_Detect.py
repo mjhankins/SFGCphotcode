@@ -39,7 +39,7 @@ from config import dpath, dpathalt, ds9path #import additional common paramters
 
 from config import *
 
-interactive=True
+interactive=False
 
 for info in field._registry:
     name=info.name
@@ -165,7 +165,7 @@ for info in field._registry:
     if segm is not None:
         segm_deblend = deblend_sources(data_bkgsub, segm, npixels=5,filter_kernel=kernel, nlevels=64,contrast=0.001)
     else:
-        segm_deblend=segm #if segm is empty pass it on to avoid errors
+        segm_deblend=None #if segm is empty pass it on to avoid errors
 
     #remove any sources that should be masked (mask3) 
     if m3lims is not None:
@@ -237,21 +237,22 @@ for info in field._registry:
         totalnoise=np.sqrt(thermalnoise+skynoise) #no shot noise -> For some reason this seems to work much better for the apertures. Need to think about why this is a bit more...
     
         #calculate SNR for the segments
-        tbl2['segmentSNR']=tbl2['segment_flux']/ totalnoise 
-    
-    #change format of columns to save fewer decimal places
-    for col in tbl2.colnames:
-        if col!='sky_centroid': #skip sky centroid since its problematic in this context
-            tbl2[col].info.format = '%.4G'
+        tbl2['segmentSNR']=tbl2['segment_flux']/ totalnoise
         
-    #display table
-    #tbl2
-    
-    #print the number of sources found
-    print('Number of segmentation map sources found: ', len(tbl2))
+        #change format of columns to save fewer decimal places
+        for col in tbl2.colnames:
+            if col!='sky_centroid': #skip sky centroid since its problematic in this context
+                tbl2[col].info.format = '%.4G'
+                
+        #print the number of sources found
+        print('Number of segmentation map sources found: ', len(tbl2))
 
-    #write out the resulting table to file
-    ascii.write(tbl2, name+'_'+str(wavelength)+'um_seg.dat', overwrite=True)
+        #write out the resulting table to file
+        ascii.write(tbl2, name+'_'+str(wavelength)+'um_seg.dat', overwrite=True)
+    else:
+        tbl2=None
+        #write out the resulting table to file
+        #ascii.write([], name+'_'+str(wavelength)+'um_seg.dat', overwrite=True)
       
     
     #lets produce a new background map that's more optimized for point sources to use with DAOfind...
@@ -359,31 +360,32 @@ for info in field._registry:
     #write out the resulting table to file
     ascii.write(DAOsources, name+'_'+str(wavelength)+'um_dao.dat', overwrite=True)
     
+    #set size of regions in ds9
+    radius = Angle(0.00083333, u.deg) #must be in degrees - current value is r=3"
        
     #create ds9 regions file for segmentation map sources
     #start by getting lists of coords from table
-    sourcecoords=tbl2['sky_centroid']
+    if tbl2 is not None:
+        sourcecoords=tbl2['sky_centroid']
     
-    #set size of regions 
-    radius = Angle(0.00083333, u.deg) #must be in degrees - current value is r=3"
     
-    #loop through and create region instances for each source
-    regions=[]
-    for i in range(0,len(sourcecoords)):
-        region = CircleSkyRegion(sourcecoords[i], radius)
-        regions.append(region)
+        #loop through and create region instances for each source
+        regions=[]
+        for i in range(0,len(sourcecoords)):
+            region = CircleSkyRegion(sourcecoords[i], radius)
+            regions.append(region)
         
-    #write out region file
-    write_ds9(regions, name+'_seg.reg')
+        #write out region file
+        write_ds9(regions, name+'_seg.reg')
     
     
-    #change the color of the regions to red - no built in way to do this in regions package :-/
-    with open(name+'_seg.reg', 'r+') as f:
-        text = f.read()
-        text = re.sub(r'\)', r') # color=red', text)
-        f.seek(0)
-        f.write(text)
-        f.truncate()
+        #change the color of the regions to red - no built in way to do this in regions package :-/
+        with open(name+'_seg.reg', 'r+') as f:
+            text = f.read()
+            text = re.sub(r'\)', r') # color=red', text)
+            f.seek(0)
+            f.write(text)
+            f.truncate()
 
     
     regions=[]
