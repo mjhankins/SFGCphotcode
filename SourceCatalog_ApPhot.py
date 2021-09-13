@@ -17,6 +17,7 @@ from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.visualization import SqrtStretch, simple_norm
 from astropy.visualization.mpl_normalize import ImageNormalize
 from astropy.io import fits,ascii
+from astropy.table import Table
 from astropy.wcs import WCS
 from astropy import units as u
 from astropy.stats import sigma_clipped_stats
@@ -29,8 +30,13 @@ from photutils.background import Background2D, MedianBackground, SExtractorBackg
 from photutils.utils import calc_total_error
 
 from regions import read_ds9
-
 from regions import read_ds9, write_ds9, CircleSkyRegion
+
+from photutils.psf import DAOGroup, IntegratedGaussianPRF
+from astropy.modeling.fitting import LevMarLSQFitter
+from photutils.psf import BasicPSFPhotometry
+from photutils.datasets import make_gaussian_sources_image
+from astropy.nddata import Cutout2D
 
 #import configuration for selected file
 from config import wavelength, segdetsig, finddetsig, bkgbox #import additional common paramters
@@ -159,48 +165,84 @@ def performApPhoto(data,wcs,sourceCoords,radii,plot=True):
 	return merged_table
 
 	
-def modTabCol(merged_table):
+def modTabCol2(merged_table):
 	merged_table.remove_columns(['xcenter_1','ycenter_1','xcenter_2','ycenter_2','sky_center_1','sky_center_2','aperture_sum','aperture_sum_err'])
 	
 	#rename some columns to avoid possible confusion
-	merged_table.rename_column('aperture_sum_0', 'aperture_sum_2as')
-	merged_table.rename_column('aperture_sum_err_0', 'aperture_sum_err_2as')
-	merged_table.rename_column('aperture_sum_1', 'aperture_sum_4as')
-	merged_table.rename_column('aperture_sum_err_1', 'aperture_sum_err_4as')
-	merged_table.rename_column('aperture_sum_2', 'aperture_sum_6as')
-	merged_table.rename_column('aperture_sum_err_2', 'aperture_sum_err_6as')
-	merged_table.rename_column('aperture_sum_3', 'aperture_sum_8as')
-	merged_table.rename_column('aperture_sum_err_3', 'aperture_sum_err_8as')
-	merged_table.rename_column('aperture_sum_4', 'aperture_sum_10as')
-	merged_table.rename_column('aperture_sum_err_4', 'aperture_sum_err_10as')
+	merged_table.rename_column('aperture_sum_0', 'aperture_sum_3.5as')
+	merged_table.rename_column('aperture_sum_err_0', 'aperture_sum_err_3.5as')
+	merged_table.rename_column('aperture_sum_1', 'aperture_sum_3.75as')
+	merged_table.rename_column('aperture_sum_err_1', 'aperture_sum_err_3.75as')
+	merged_table.rename_column('aperture_sum_2', 'aperture_sum_4.0as')
+	merged_table.rename_column('aperture_sum_err_2', 'aperture_sum_err_4.0as')
+	merged_table.rename_column('aperture_sum_3', 'aperture_sum_4.25as')
+	merged_table.rename_column('aperture_sum_err_3', 'aperture_sum_err_4.25as')
+	merged_table.rename_column('aperture_sum_4', 'aperture_sum_4.5as')
+	merged_table.rename_column('aperture_sum_err_4', 'aperture_sum_err_4.5as')
+	merged_table.rename_column('aperture_sum_5', 'aperture_sum_4.75as')
+	merged_table.rename_column('aperture_sum_err_5', 'aperture_sum_err_4.75as')
+	merged_table.rename_column('aperture_sum_6', 'aperture_sum_5.0as')
+	merged_table.rename_column('aperture_sum_err_6', 'aperture_sum_err_5.0as')
+	merged_table.rename_column('aperture_sum_7', 'aperture_sum_5.25as')
+	merged_table.rename_column('aperture_sum_err_7', 'aperture_sum_err_5.25as')
+	merged_table.rename_column('aperture_sum_8', 'aperture_sum_5.5as')
+	merged_table.rename_column('aperture_sum_err_8', 'aperture_sum_err_5.5as')
+	merged_table.rename_column('aperture_sum_9', 'aperture_sum_5.75as')
+	merged_table.rename_column('aperture_sum_err_9', 'aperture_sum_err_5.75as')
+	merged_table.rename_column('aperture_sum_10', 'aperture_sum_6.0as')
+	merged_table.rename_column('aperture_sum_err_10', 'aperture_sum_err_6.0as') 
+	merged_table.rename_column('aperture_sum_11', 'aperture_sum_10as')
+	merged_table.rename_column('aperture_sum_err_11', 'aperture_sum_err_10as')
 	
 	
 	#compute area for the different size apertures 
-	ap2area=merged_table['pixApArea']*(2./6.)**2
-	ap4area=merged_table['pixApArea']*(4./6.)**2
-	#ap6area=merged_table['pixApArea']*(6./6.)**2
-	ap8area=merged_table['pixApArea']*(8./6.)**2
+	ap350area=merged_table['pixApArea']*(3.5/6.)**2
+	ap375area=merged_table['pixApArea']*(3.75/6.)**2
+	ap400area=merged_table['pixApArea']*(4.0/6.)**2
+	ap425area=merged_table['pixApArea']*(4.25/6.)**2
+	ap450area=merged_table['pixApArea']*(4.5/6.)**2
+	ap475area=merged_table['pixApArea']*(4.75/6.)**2
+	ap500area=merged_table['pixApArea']*(5.0/6.)**2
+	ap525area=merged_table['pixApArea']*(5.25/6.)**2
+	ap550area=merged_table['pixApArea']*(5.5/6.)**2
+	ap575area=merged_table['pixApArea']*(5.75/6.)**2
+	ap600area=merged_table['pixApArea']*(6.0/6.)**2
 	ap10area=merged_table['pixApArea']*(10./6.)**2
 	
 	
 	#calculate local bkg subtracted photometry for the other apertures 
-	merged_table['aper_sum_bkgsub_2as']=(merged_table['aperture_sum_2as']/ap2area-merged_table['ann_bkg_med'])*ap2area
-	merged_table['aper_sum_bkgsub_4as']=(merged_table['aperture_sum_4as']/ap4area-merged_table['ann_bkg_med'])*ap4area
-	#merged_table['aper_sum_bkgsub_6as']=(merged_table['aperture_sum_6as']/ap6area-merged_table['ann_bkg_med'])*ap6area
-	merged_table['aper_sum_bkgsub_8as']=(merged_table['aperture_sum_8as']/ap8area-merged_table['ann_bkg_med'])*ap8area
+	merged_table['aper_sum_bkgsub_3.5as']=(merged_table['aperture_sum_3.5as']/ap350area-merged_table['ann_bkg_med'])*ap350area
+	merged_table['aper_sum_bkgsub_3.75as']=(merged_table['aperture_sum_3.75as']/ap375area-merged_table['ann_bkg_med'])*ap375area
+	merged_table['aper_sum_bkgsub_4.0as']=(merged_table['aperture_sum_4.0as']/ap400area-merged_table['ann_bkg_med'])*ap400area
+	merged_table['aper_sum_bkgsub_4.25as']=(merged_table['aperture_sum_4.25as']/ap425area-merged_table['ann_bkg_med'])*ap425area
+	merged_table['aper_sum_bkgsub_4.5as']=(merged_table['aperture_sum_4.5as']/ap450area-merged_table['ann_bkg_med'])*ap450area
+	merged_table['aper_sum_bkgsub_4.75as']=(merged_table['aperture_sum_4.75as']/ap475area-merged_table['ann_bkg_med'])*ap475area
+	merged_table['aper_sum_bkgsub_5.0as']=(merged_table['aperture_sum_5.0as']/ap500area-merged_table['ann_bkg_med'])*ap500area
+	merged_table['aper_sum_bkgsub_5.25as']=(merged_table['aperture_sum_5.25as']/ap525area-merged_table['ann_bkg_med'])*ap525area
+	merged_table['aper_sum_bkgsub_5.5as']=(merged_table['aperture_sum_5.5as']/ap550area-merged_table['ann_bkg_med'])*ap550area
+	merged_table['aper_sum_bkgsub_5.75as']=(merged_table['aperture_sum_5.75as']/ap575area-merged_table['ann_bkg_med'])*ap575area
+	merged_table['aper_sum_bkgsub_6.0as']=(merged_table['aperture_sum_6.0as']/ap600area-merged_table['ann_bkg_med'])*ap600area
 	merged_table['aper_sum_bkgsub_10as']=(merged_table['aperture_sum_10as']/ap10area-merged_table['ann_bkg_med'])*ap10area
 	
 	#calculate snr for each aperture
-	merged_table['aper_snr_2as']=merged_table['aper_sum_bkgsub_2as']/np.sqrt((merged_table['aperture_sum_err_2as']+merged_table['skynoise_pix']*ap2area)*(1+ap2area/merged_table['pixAnnArea']))
-	merged_table['aper_snr_4as']=merged_table['aper_sum_bkgsub_4as']/np.sqrt((merged_table['aperture_sum_err_4as']+merged_table['skynoise_pix']*ap4area)*(1+ap4area/merged_table['pixAnnArea']))
-	#merged_table['aper_snr_6as']=merged_table['aper_sum_bkgsub_6as']/np.sqrt((merged_table['aperture_sum_err_6as']+merged_table['skynoise_pix']*ap6area)*(1+ap6area/merged_table['pixAnnArea']))
-	merged_table['aper_snr_8as']=merged_table['aper_sum_bkgsub_8as']/np.sqrt((merged_table['aperture_sum_err_8as']+merged_table['skynoise_pix']*ap8area)*(1+ap8area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_3.5as']=merged_table['aper_sum_bkgsub_3.5as']/np.sqrt((merged_table['aperture_sum_err_3.5as']+merged_table['skynoise_pix']*ap350area)*(1+ap350area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_3.75as']=merged_table['aper_sum_bkgsub_3.75as']/np.sqrt((merged_table['aperture_sum_err_3.75as']+merged_table['skynoise_pix']*ap375area)*(1+ap375area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_4.0as']=merged_table['aper_sum_bkgsub_4.0as']/np.sqrt((merged_table['aperture_sum_err_4.0as']+merged_table['skynoise_pix']*ap400area)*(1+ap400area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_4.25as']=merged_table['aper_sum_bkgsub_4.25as']/np.sqrt((merged_table['aperture_sum_err_4.25as']+merged_table['skynoise_pix']*ap425area)*(1+ap425area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_4.5as']=merged_table['aper_sum_bkgsub_4.5as']/np.sqrt((merged_table['aperture_sum_err_4.5as']+merged_table['skynoise_pix']*ap450area)*(1+ap450area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_4.75as']=merged_table['aper_sum_bkgsub_4.75as']/np.sqrt((merged_table['aperture_sum_err_4.75as']+merged_table['skynoise_pix']*ap475area)*(1+ap475area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_5.0as']=merged_table['aper_sum_bkgsub_5.0as']/np.sqrt((merged_table['aperture_sum_err_5.0as']+merged_table['skynoise_pix']*ap500area)*(1+ap500area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_5.25as']=merged_table['aper_sum_bkgsub_5.25as']/np.sqrt((merged_table['aperture_sum_err_5.25as']+merged_table['skynoise_pix']*ap525area)*(1+ap525area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_5.5as']=merged_table['aper_sum_bkgsub_5.5as']/np.sqrt((merged_table['aperture_sum_err_5.5as']+merged_table['skynoise_pix']*ap550area)*(1+ap550area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_5.75as']=merged_table['aper_sum_bkgsub_5.75as']/np.sqrt((merged_table['aperture_sum_err_5.75as']+merged_table['skynoise_pix']*ap575area)*(1+ap575area/merged_table['pixAnnArea']))
+	merged_table['aper_snr_6.0as']=merged_table['aper_sum_bkgsub_6.0as']/np.sqrt((merged_table['aperture_sum_err_6.0as']+merged_table['skynoise_pix']*ap600area)*(1+ap600area/merged_table['pixAnnArea']))
 	merged_table['aper_snr_10as']=merged_table['aper_sum_bkgsub_10as']/np.sqrt((merged_table['aperture_sum_err_10as']+merged_table['skynoise_pix']*ap10area)*(1+ap10area/merged_table['pixAnnArea']))
 	
+    
 	#calculate max snr for all apertures
-	snr_values=np.array(merged_table['aper_snr_2as','aper_snr_4as','aper_snr_6as','aper_snr_8as','aper_snr_10as'])
+	snr_values=np.array(merged_table['aper_snr_3.5as','aper_snr_3.75as','aper_snr_4.0as','aper_snr_4.25as','aper_snr_4.5as','aper_snr_4.75as','aper_snr_5.0as','aper_snr_5.25as','aper_snr_5.5as','aper_snr_5.75as','aper_snr_6.0as','aper_snr_10as'])
 	snr_values.dtype=np.float
-	snr_values=np.reshape(snr_values, (-1,5))
+	snr_values=np.reshape(snr_values, (-1,12))
 	maxsnr=np.nanmax(snr_values,axis=1)
 	merged_table['aper_snr_max']=maxsnr
 	
@@ -208,10 +250,89 @@ def modTabCol(merged_table):
 	merged_table['Field']='C7'+name
 	merged_table['wv']=wavelength
 	
-	#return the table
+	#display table
 	return merged_table
 
-
+#new addition to include FWHM measurements for DAO
+def doPSFphoto(image,bkgmodel,sourceTable,sigma_init,plotting=False): 
+	 #create initial guess positions for fitting routine
+	
+	initTab=Table()
+	initTab['x_0']=sourceTable['xcentroid']
+	initTab['y_0']=sourceTable['ycentroid']
+	initTab['flux']=sourceTable['aper_sum_bkgsub_5.0as']
+	
+	try:
+		initTab['sigma_0']=sourceTable['fwhm']
+	except:
+		initTab['sigma_0']=2.5
+	
+	daogroup = DAOGroup(crit_separation=8)
+	mmm_bkg = MedianBackground() #MedianBackground()#MMMBackground()
+	fitter = LevMarLSQFitter()
+	gaussian_prf = IntegratedGaussianPRF(sigma=sigma_init)
+	gaussian_prf.sigma.fixed = False
+	mmm_bkg.sigma_clip.fixed = False
+	
+	basic_phot_obj=BasicPSFPhotometry(group_maker=daogroup, bkg_estimator=mmm_bkg, psf_model=gaussian_prf, fitter=fitter, fitshape=(11, 11))
+	
+	results = basic_phot_obj(image,init_guesses=initTab) #must provide initial guesses as an astropy table with columns x_0 and y_0 in pixel coords
+	
+	#results=photB_results[photB_results['flux_fit']>0]
+	#results=results[(results['sigma_fit']>0) & (results['sigma_fit']<14) ]
+	
+	sourceTable['PSF_fwhm']=results['sigma_fit']*2.355
+	#sourceTable['PSF_fwhm_unc']=results['sigma_unc']*2.355 #note sigma_unc isn't consistently returned for some reason...
+	sourceTable['PSF_Flux_1D']=results['flux_fit']
+	#sourceTable['PSF_Flux_unc_1D']=results['flux_unc']
+	#sourceTable['psfSNR']=results['flux_fit']/results['flux_unc']
+	
+	'''
+	#construct model residuals
+	sources = Table()
+	sources['flux'] = results['flux_fit']
+	sources['x_mean'] = results['x_fit']
+	sources['y_mean'] = results['y_fit']
+	sources['x_stddev'] = results['sigma_fit']
+	sources['y_stddev'] = sources['x_stddev']
+	#sources['theta'] = [0] * 2
+	
+	modelimage = make_gaussian_sources_image(np.shape(data), sources)
+	
+	#residual=data-modelimage
+	residual=data-(modelimage+bkgmodel) #include bkg model   
+	    
+	chivals=[]
+	
+	for source in results:
+		spos=(np.int(source['x_fit']),np.int(source['y_fit']))
+		cutout=Cutout2D(residual,spos,15)
+		#print(np.sum(cutout.data))
+		fudge=100.
+		chivals.append((np.nansum(cutout.data)/21.)**2*100)
+		
+	sourceTable['psfFitChi']=chivals
+	#print(chivals)
+	
+	#rename flux initial guess in table 
+	results.rename_column('flux', 'flux_init')
+	
+	if plotting==True:
+		#a few diagnostic plots to examine background contributions to aperture flux
+		fig, (ax1,ax2) = plt.subplots(1, 2,figsize=(15,5.5))
+		
+		ax1.set_title('Data')
+		p1=ax1.imshow(data,origin='lower')
+		fig.colorbar(p1, ax=ax1)
+		
+		
+		ax2.set_title('Residual Map from DAOfind')
+		p2=ax2.imshow(DAOresidual,origin='lower',vmin=-0.2,vmax=0.2)
+		fig.colorbar(p2, ax=ax2)
+	    
+	'''
+	#return photB_results, residual#, chivals
+	return sourceTable
 
 #this is main
 for info in field._registry:
@@ -316,7 +437,18 @@ for info in field._registry:
         usersources=False
         print('No user defined DS9 sources found')
         
-    radii = [2,4,6,8,10] #define aperture radii & construct apertures (line below)
+    #radii = [2,4,6,8,10] #define aperture radii & construct apertures (line below) - old
+    radii = [3.5,3.75,4.0,4.25,4.5,4.75,5,5.25,5.5,5.75,6.0,10] #define aperture radii & construct apertures (line below) - new
+
+    #create background model for image using median method
+    bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
+    bkg_data = Background2D(data,(bkgbox, bkgbox), filter_size=(3, 3),bkg_estimator=bkg_estimator,edge_method='pad')
+    bkg_rms=bkg_data.background_rms
+    bkg=bkg_data.background 
+
+    #create background subtracted image
+    data_bkgsub = data - bkg
+    
     
     if segTab is not None:
         SegPhotTable=performApPhoto(data,wcsmap,sourcesseg,radii,plot=interactive)
@@ -335,7 +467,9 @@ for info in field._registry:
         #merge Tables
         merged_table_seg = join(segTab, SegPhotTable, keys='id')
         
-        mtSeg=modTabCol(merged_table_seg)
+        mtSeg=modTabCol2(merged_table_seg)
+        
+        mtSeg=doPSFphoto(data_bkgsub,bkg,mtSeg,2.0)
         
         #write out the resulting tables to file
         ascii.write(mtSeg, name+'_'+str(wavelength)+'um_segCat.dat', overwrite=True)
@@ -351,7 +485,9 @@ for info in field._registry:
         #merge Tables
         merged_table_dao = join(daoTab, DaoPhotTable, keys='id')
         
-        mtDao=modTabCol(merged_table_dao)
+        mtDao=modTabCol2(merged_table_dao)
+        
+        mtDao=doPSFphoto(data_bkgsub,bkg,mtDao,2.0)
             
         #write out the resulting tables to file
         ascii.write(mtDao, name+'_'+str(wavelength)+'um_daoCat.dat', overwrite=True)
@@ -364,7 +500,9 @@ for info in field._registry:
             print('\nPhotometry table for user defined sources in ds9.')
             print(UserPhotTable)
 
-        mtds9=modTabCol(UserPhotTable)
+        mtds9=modTabCol2(UserPhotTable)
+        
+        mtds9=doPSFphoto(data_bkgsub,bkg,mtds9,2.0)
  
         ascii.write(mtds9, name+'_'+str(wavelength)+'um_usrCat.dat', overwrite=True)
     
