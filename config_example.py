@@ -683,4 +683,114 @@ m3lims=None)
 
 
 
+#File Names for cycle9 Field A
+file25='F0754_FO_IMA_0902161_FORF253_CAL_0176-0198.fits'
+file37='F0754_FO_IMA_0902161_FORF371_CAL_0176-0198.fits'
+if wavelength==25:
+    fname=file25
+else:
+    fname=file37
+#parameters defining the field object for A9
+FieldA9=field(
+name='FieldA9',
+filename=fname,
+m1cut=0.5,
+m2lims=None, #[[250,350,150,250]],
+m3lims=None)
+
+#File Names for cycle9 Field B
+file25='F0754_FO_IMA_0902162_FORF253_CAL_0127-0175.fits'
+file37='F0754_FO_IMA_0902162_FORF371_CAL_0127-0175.fits'
+if wavelength==25:
+    fname=file25
+else:
+    fname=file37
+#parameters defining the field object for B9
+FieldB9=field(
+name='FieldB9',
+filename=fname,
+m1cut=0.5,
+m2lims=None, #[[250,350,150,250]],
+m3lims=None)
+
+
+#File Names for cycle9 Field C
+file25='F0754_FO_IMA_0902163_FORF253_CAL_0077-0126.fits'
+file37='F0754_FO_IMA_0902163_FORF371_CAL_0077-0126.fits'
+if wavelength==25:
+    fname=file25
+else:
+    fname=file37
+#parameters defining the field object for C9
+FieldC9=field(
+name='FieldC9',
+filename=fname,
+m1cut=0.5,
+m2lims=None, #[[250,350,150,250]],
+m3lims=None)
+
+
+#File Names for cycle9 Field F
+file25='F0753_FO_IMA_0902166_FORF253_CAL_0192-0227.fits'
+file37='F0753_FO_IMA_0902166_FORF371_CAL_0192-0227.fits'
+if wavelength==25:
+    fname=file25
+else:
+    fname=file37
+#parameters defining the field object for F9
+FieldF9=field(
+name='FieldF9',
+filename=fname,
+m1cut=0.5,
+m2lims=None, #[[250,350,150,250]],
+m3lims=None)
+
+
+#File Names for cycle9 Field I
+file25='F0755_FO_IMA_0902169_FORF253_CAL_0133-0182.fits'
+file37='F0755_FO_IMA_0902169_FORF253_CAL_0133-0182.fits'
+if wavelength==25:
+    fname=file25
+else:
+    fname=file37
+#parameters defining the field object for I9
+FieldI9=field(
+name='FieldI9',
+filename=fname,
+m1cut=0.5,
+m2lims=None, #[[250,350,150,250]],
+m3lims=None)
+
+
+#File Names for cycle9 Field L
+file25='F0753_FO_IMA_09021612_FORF253_CAL_0163-0187.fits'
+file37='F0753_FO_IMA_09021612_FORF371_CAL_0163-0187.fits'
+if wavelength==25:
+    fname=file25
+else:
+    fname=file37
+#parameters defining the field object for L9
+FieldL9=field(
+name='FieldL9',
+filename=fname,
+m1cut=0.5,
+m2lims=None, #[[250,350,150,250]],
+m3lims=None)
+
+
+#File Names for cycle9 Field N
+file25='F0755_FO_IMA_09021614_FORF253_CAL_0002-0132.fits'
+file37='F0755_FO_IMA_09021614_FORF371_CAL_0002-0132.fits'
+if wavelength==25:
+    fname=file25
+else:
+    fname=file37
+#parameters defining the field object for N9
+FieldN9=field(
+name='FieldN9',
+filename=fname,
+m1cut=0.5,
+m2lims=None, #[[250,350,150,250]],
+m3lims=None)
+
 
