@@ -469,7 +469,7 @@ for info in field._registry:
         
         mtSeg=modTabCol2(merged_table_seg)
         
-        mtSeg=doPSFphoto(data_bkgsub,bkg,mtSeg,2.0)
+        #mtSeg=doPSFphoto(data_bkgsub,bkg,mtSeg,2.0)
         
         #write out the resulting tables to file
         ascii.write(mtSeg, name+'_'+str(wavelength)+'um_segCat.dat', overwrite=True)
@@ -487,7 +487,7 @@ for info in field._registry:
         
         mtDao=modTabCol2(merged_table_dao)
         
-        mtDao=doPSFphoto(data_bkgsub,bkg,mtDao,2.0)
+        #mtDao=doPSFphoto(data_bkgsub,bkg,mtDao,2.0)
             
         #write out the resulting tables to file
         ascii.write(mtDao, name+'_'+str(wavelength)+'um_daoCat.dat', overwrite=True)
@@ -502,7 +502,7 @@ for info in field._registry:
 
         mtds9=modTabCol2(UserPhotTable)
         
-        mtds9=doPSFphoto(data_bkgsub,bkg,mtds9,2.0)
+        #mtds9=doPSFphoto(data_bkgsub,bkg,mtds9,2.0)
  
         ascii.write(mtds9, name+'_'+str(wavelength)+'um_usrCat.dat', overwrite=True)
     

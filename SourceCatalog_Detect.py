@@ -354,11 +354,11 @@ for info in field._registry:
     #print the number of sources found
     if DAOsources is not None:
         print('Number of DAOfind sources found: ', len(DAOsources))
+        #write out the resulting table to file
+        ascii.write(DAOsources, name+'_'+str(wavelength)+'um_dao.dat', overwrite=True)
     else:
         print('Number of DAOfindSources found: 0')
     
-    #write out the resulting table to file
-    ascii.write(DAOsources, name+'_'+str(wavelength)+'um_dao.dat', overwrite=True)
     
     #set size of regions in ds9
     radius = Angle(0.00083333, u.deg) #must be in degrees - current value is r=3"
