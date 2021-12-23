@@ -130,6 +130,8 @@ dmypy.json
 
 # old folder
 old/
+hold/
 
 #local configuration file
 config.py
+
