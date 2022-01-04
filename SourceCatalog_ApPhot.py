@@ -21,7 +21,7 @@ from astropy.table import Table
 from astropy.wcs import WCS
 from astropy import units as u
 from astropy.stats import sigma_clipped_stats
-from astropy.table import join
+from astropy.table import join, Table
 from astropy.coordinates import SkyCoord
 
 from photutils.aperture import SkyCircularAperture,SkyCircularAnnulus,aperture_photometry 
@@ -376,16 +376,19 @@ for info in field._registry:
     errormap=np.sqrt(varmap)
     
     #load in the catalog files if they exist
-    if os.path.isfile(name+'_'+str(wavelength)+'um_seg.dat'):
-        segTab=ascii.read(name+'_'+str(wavelength)+'um_seg.dat')
+    if os.path.isfile(name+'_'+str(wavelength)+'um_seg.fits'):
+        #segTab=ascii.read(name+'_'+str(wavelength)+'um_seg.dat')
+        segTab=Table.read(name+'_'+str(wavelength)+'um_seg.fits')
     else:
         segTab=None
     
-    if os.path.isfile(name+'_'+str(wavelength)+'um_dao.dat'):   
-        daoTab=ascii.read(name+'_'+str(wavelength)+'um_dao.dat')
+    if os.path.isfile(name+'_'+str(wavelength)+'um_dao.fits'):   
+        #daoTab=ascii.read(name+'_'+str(wavelength)+'um_dao.dat')
+        daoTab=Table.read(name+'_'+str(wavelength)+'um_dao.fits')
     else:
         daoTab=None
         
+    '''    
     #Source coordinates need to be in the form of skycoord objects to create apertures. Ascii tables save as strings so this code puts them back in the right form. 
     scseg=[]
     if segTab is not None:
@@ -414,7 +417,13 @@ for info in field._registry:
         
         daoTab['skycoords']=scdao
         sourcesdao=daoTab['skycoords']
-    
+    '''
+    #get source coordinates
+    if segTab is not None:
+        sourcesseg=segTab['sky_centroid']
+        
+    if daoTab is not None:
+        sourcesdao=daoTab['sky_centroid']
     
     #check if user defined ds9 file exists
     if os.path.isfile(name+'_ds9.reg'):
@@ -472,7 +481,9 @@ for info in field._registry:
         #mtSeg=doPSFphoto(data_bkgsub,bkg,mtSeg,2.0)
         
         #write out the resulting tables to file
-        ascii.write(mtSeg, name+'_'+str(wavelength)+'um_segCat.dat', overwrite=True)
+        #ascii.write(mtSeg, name+'_'+str(wavelength)+'um_segCat.dat', overwrite=True)
+        mtSeg.write(name+'_'+str(wavelength)+'um_segCat.fits',overwrite=True)
+
 
     if daoTab is not None:
         DaoPhotTable=performApPhoto(data,wcsmap,sourcesdao,radii,plot=interactive)
@@ -490,7 +501,9 @@ for info in field._registry:
         #mtDao=doPSFphoto(data_bkgsub,bkg,mtDao,2.0)
             
         #write out the resulting tables to file
-        ascii.write(mtDao, name+'_'+str(wavelength)+'um_daoCat.dat', overwrite=True)
+        #ascii.write(mtDao, name+'_'+str(wavelength)+'um_daoCat.dat', overwrite=True)
+        mtDao.write(name+'_'+str(wavelength)+'um_daoCat.fits',overwrite=True)
+
     
     if usersources:
         UserPhotTable=performApPhoto(data,ds9sc,radii,plot=interactive)
@@ -504,5 +517,6 @@ for info in field._registry:
         
         #mtds9=doPSFphoto(data_bkgsub,bkg,mtds9,2.0)
  
-        ascii.write(mtds9, name+'_'+str(wavelength)+'um_usrCat.dat', overwrite=True)
+        #ascii.write(mtds9, name+'_'+str(wavelength)+'um_usrCat.dat', overwrite=True)
+        usrCat.write(name+'_'+str(wavelength)+'um_usrCat.fits', overwrite=True)
     

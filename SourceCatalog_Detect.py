@@ -22,7 +22,7 @@ from astropy.wcs import WCS
 from astropy.wcs.utils import pixel_to_skycoord,skycoord_to_pixel
 from astropy import units as u
 from astropy.stats import sigma_clipped_stats
-from astropy.table import join
+from astropy.table import join, Table
 
 from photutils.aperture import SkyCircularAperture,SkyCircularAnnulus,aperture_photometry, CircularAperture
 from photutils.segmentation import detect_threshold, detect_sources, deblend_sources, SourceCatalog
@@ -246,9 +246,13 @@ for info in field._registry:
                 
         #print the number of sources found
         print('Number of segmentation map sources found: ', len(tbl2))
+        
+        #convert Qtable to table so we can write as fits
+        ntbl2=Table(tbl2)
 
         #write out the resulting table to file
-        ascii.write(tbl2, name+'_'+str(wavelength)+'um_seg.dat', overwrite=True)
+        #ascii.write(tbl2, name+'_'+str(wavelength)+'um_seg.dat', overwrite=True)
+        ntbl2.write(name+'_'+str(wavelength)+'um_seg.fits',overwrite=True)
     else:
         tbl2=None
         #write out the resulting table to file
@@ -355,7 +359,11 @@ for info in field._registry:
     if DAOsources is not None:
         print('Number of DAOfind sources found: ', len(DAOsources))
         #write out the resulting table to file
-        ascii.write(DAOsources, name+'_'+str(wavelength)+'um_dao.dat', overwrite=True)
+        #ascii.write(DAOsources, name+'_'+str(wavelength)+'um_dao.dat', overwrite=True)
+        
+        #convert Qtable to table so we can write as fits
+        nDAOsources=Table(DAOsources)
+        nDAOsources.write(name+'_'+str(wavelength)+'um_dao.fits',overwrite=True)
     else:
         print('Number of DAOfindSources found: 0')
     

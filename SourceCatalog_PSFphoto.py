@@ -235,16 +235,21 @@ for info in field._registry:
     #errormap=np.sqrt(varmap)
     
     #load in the catalog files if they exist
-    if os.path.isfile(name+'_'+str(wavelength)+'um_segCat.dat'):
-        segTab=ascii.read(name+'_'+str(wavelength)+'um_segCat.dat')
+    if os.path.isfile(name+'_'+str(wavelength)+'um_segCat.fits'):
+        #segTab=ascii.read(name+'_'+str(wavelength)+'um_segCat.dat')
+        segTab=Table.read(name+'_'+str(wavelength)+'um_segCat.fits')
+
     else:
         segTab=None
-    
-    if os.path.isfile(name+'_'+str(wavelength)+'um_daoCat.dat'):   
-        daoTab=ascii.read(name+'_'+str(wavelength)+'um_daoCat.dat')
+   
+    if os.path.isfile(name+'_'+str(wavelength)+'um_daoCat.fits'):   
+        #daoTab=ascii.read(name+'_'+str(wavelength)+'um_daoCat.dat')
+        daoTab=Table.read(name+'_'+str(wavelength)+'um_daoCat.fits')
+
     else:
         daoTab=None
-        
+      
+    '''
     #Source coordinates need to be in the form of skycoord objects to create apertures. Ascii tables save as strings so this code puts them back in the right form. 
     scseg=[]
     if segTab is not None:
@@ -273,7 +278,13 @@ for info in field._registry:
         
         daoTab['skycoords']=scdao
         sourcesdao=daoTab['skycoords']
-    
+    '''
+    #get source coordinates
+    if segTab is not None:
+        sourcesseg=segTab['sky_centroid']
+        
+    if daoTab is not None:
+        sourcesdao=daoTab['sky_centroid']
     
     #check if user defined ds9 file exists
     if os.path.isfile(name+'_'+str(wavelength)+'um_usrCat.dat'):
@@ -340,7 +351,7 @@ for info in field._registry:
         
         #write out the resulting tables to file
         segTab.write(name+'_'+str(wavelength)+'um_segCat_psf.fits',overwrite=True)
-        ascii.write(segTab,name+'_'+str(wavelength)+'um_segCat_psf.dat',overwrite=True)
+        #ascii.write(segTab,name+'_'+str(wavelength)+'um_segCat_psf.dat',overwrite=True)
 
     if daoTab is not None:
         #perform psf photometry
@@ -370,7 +381,7 @@ for info in field._registry:
             
         #write out the resulting tables to file
         daoTab.write(name+'_'+str(wavelength)+'um_daoCat_psf.fits',overwrite=True)
-        ascii.write(daoTab,name+'_'+str(wavelength)+'um_daoCat_psf.dat',overwrite=True)
+        #ascii.write(daoTab,name+'_'+str(wavelength)+'um_daoCat_psf.dat',overwrite=True)
     
     if usersources:
         #perform psf photometry
@@ -399,5 +410,5 @@ for info in field._registry:
         usrTab['PSF_QFLAG']=modpar[:,16]
         
         usrTab.write(name+'_'+str(wavelength)+'um_usrCat_psf.fits',overwrite=True)
-        ascii.write(usrTab,name+'_'+str(wavelength)+'um_usrCat_psf.dat',overwrite=True)
+        #ascii.write(usrTab,name+'_'+str(wavelength)+'um_usrCat_psf.dat',overwrite=True)
     
