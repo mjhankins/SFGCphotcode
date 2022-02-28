@@ -128,10 +128,46 @@ def performApPhoto(data,wcs,sourceCoords,radii,plot=True):
 	#add columns for background information and also background subtracted apertures
 	phot_table2['ann_bkg_med'] = bkg_median
 	phot_table2['ann_bkg_mean'] = bkg_mean 
+	phot_table2['ann_bkg_std'] = bkg_std 
 	phot_table2['aper_sum_bkgsub_6as'] = (phot_table2['aperture_sum']/pix_aperture.area - phot_table2['ann_bkg_med'])* pix_aperture.area 
 	phot_table2['aper_sum_bkgsub_err_6as'] = phot_table2['aperture_sum_err'] # should this be modified by bkgsub in some way?
 	#not sure if the above is right for the error array...
 
+
+
+	#information from exposure time maps
+	#create lists to store information for later
+	texp_mean=[]
+	texp_med=[]
+	texpmasks=[]
+
+	#create mask array for the exp time map apertures
+	ap_masks = pix_aperture.to_mask(method='exact')
+
+	#for each of the annuli loop through and calculate stats using sigma cliped stats
+	for mask in ap_masks:
+		ap_texp = mask.multiply(tmap)
+		#print(np.shape(mask))
+        
+		##this is a bit of debugging to handle if the mask array is the wrong shape
+		#if np.shape(mask.data)[0]==41:
+		#	maskdata=mask.data[:-1,:]
+		#else:
+		#	maskdata=mask.data
+        
+		#do statistics
+		ap_texp_1d = ap_texp[mask.data > 0]
+		meansc, median_sigclip, stdsc = sigma_clipped_stats(ap_texp_1d)
+		texp_med.append(median_sigclip)
+		texp_mean.append(meansc)
+		texpmasks.append(mask.data)
+
+    
+	phot_table2['texp_med'] = texp_med
+	phot_table2['texp_mean'] = texp_mean
+    
+    
+	'''
 	#calculate sky noise for 6 pixel aperture
 	skynoise=np.sqrt(phot_table2['ann_bkg_med']*pix_aperture.area)
 	sna=np.array(skynoise)
@@ -148,17 +184,30 @@ def performApPhoto(data,wcs,sourceCoords,radii,plot=True):
 	#thermal noise from camera (from error map)
 	thermalnoise=phot_table2['aperture_sum_err']
     
-	#save these for later use
-	phot_table2['pixApArea']=pix_aperture.area
-	phot_table2['pixAnnArea']=pix_annulus_aperture.area
+
 
 	#compute total noise 
 	#totalnoise=np.sqrt(sourcenoise+thermalnoise+skynoise) #all noise sources
 	#totalnoise=np.sqrt(thermalnoise+skynoise) # no shot noise -> For some reason this seems to give more 'reasonable' values. Need to think about why this is a bit more...
 	totalnoise=np.sqrt((thermalnoise+skynoise)*(1+pix_aperture.area/pix_annulus_aperture.area)) #modified to account for pixel stats
+	'''  
+    
+	r_ap=6.0/0.768 #aperture in arcsecs converted to pixels
+    
+	#from https://sofia-data-analysis-cookbooks.readthedocs.io/en/latest/FORCAST-photometry_detailed.html
+	#totalnoise=np.sqrt(2*np.pi*(np.nanmax(tmap)/phot_table2['texp_mean'])*(r_ap*imgbkg/phot_table2['aper_sum_bkgsub_6as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+    
+	totalnoise=np.sqrt(2*np.pi*(r_ap*phot_table2['ann_bkg_std']/phot_table2['aper_sum_bkgsub_6as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
 
+    
 	#SNR calc for 6 pixel aperture
 	phot_table2['aper_snr_6as']=phot_table2['aper_sum_bkgsub_6as']/totalnoise
+
+    
+	#save these for later use
+	phot_table2['pixApArea']=pix_aperture.area
+	phot_table2['pixAnnArea']=pix_annulus_aperture.area
+    
     
 	merged_table = join(phot_table, phot_table2, keys='id')
 
@@ -223,7 +272,7 @@ def modTabCol2(merged_table):
 	merged_table['aper_sum_bkgsub_5.75as']=(merged_table['aperture_sum_5.75as']/ap575area-merged_table['ann_bkg_med'])*ap575area
 	merged_table['aper_sum_bkgsub_6.0as']=(merged_table['aperture_sum_6.0as']/ap600area-merged_table['ann_bkg_med'])*ap600area
 	merged_table['aper_sum_bkgsub_10as']=(merged_table['aperture_sum_10as']/ap10area-merged_table['ann_bkg_med'])*ap10area
-	
+	'''
 	#calculate snr for each aperture
 	merged_table['aper_snr_3.5as']=merged_table['aper_sum_bkgsub_3.5as']/np.sqrt((merged_table['aperture_sum_err_3.5as']+merged_table['skynoise_pix']*ap350area)*(1+ap350area/merged_table['pixAnnArea']))
 	merged_table['aper_snr_3.75as']=merged_table['aper_sum_bkgsub_3.75as']/np.sqrt((merged_table['aperture_sum_err_3.75as']+merged_table['skynoise_pix']*ap375area)*(1+ap375area/merged_table['pixAnnArea']))
@@ -237,6 +286,22 @@ def modTabCol2(merged_table):
 	merged_table['aper_snr_5.75as']=merged_table['aper_sum_bkgsub_5.75as']/np.sqrt((merged_table['aperture_sum_err_5.75as']+merged_table['skynoise_pix']*ap575area)*(1+ap575area/merged_table['pixAnnArea']))
 	merged_table['aper_snr_6.0as']=merged_table['aper_sum_bkgsub_6.0as']/np.sqrt((merged_table['aperture_sum_err_6.0as']+merged_table['skynoise_pix']*ap600area)*(1+ap600area/merged_table['pixAnnArea']))
 	merged_table['aper_snr_10as']=merged_table['aper_sum_bkgsub_10as']/np.sqrt((merged_table['aperture_sum_err_10as']+merged_table['skynoise_pix']*ap10area)*(1+ap10area/merged_table['pixAnnArea']))
+	'''
+    
+    
+	#calculate snr for each aperture - updated using https://sofia-data-analysis-cookbooks.readthedocs.io/en/latest/FORCAST-photometry_detailed.html
+	merged_table['aper_snr_3.5as']=merged_table['aper_sum_bkgsub_3.5as']/np.sqrt(2*np.pi*((3.5/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_3.5as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025) 
+	merged_table['aper_snr_3.75as']=merged_table['aper_sum_bkgsub_3.75as']/np.sqrt(2*np.pi*((3.75/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_3.75as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_4.0as']=merged_table['aper_sum_bkgsub_4.0as']/np.sqrt(2*np.pi*((4.0/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_4.0as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_4.25as']=merged_table['aper_sum_bkgsub_4.25as']/np.sqrt(2*np.pi*((4.25/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_4.25as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_4.5as']=merged_table['aper_sum_bkgsub_4.5as']/np.sqrt(2*np.pi*((4.5/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_4.5as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_4.75as']=merged_table['aper_sum_bkgsub_4.75as']/np.sqrt(2*np.pi*((4.75/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_4.75as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_5.0as']=merged_table['aper_sum_bkgsub_5.0as']/np.sqrt(2*np.pi*((5.0/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_5.0as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_5.25as']=merged_table['aper_sum_bkgsub_5.25as']/np.sqrt(2*np.pi*((5.25/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_5.25as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_5.5as']=merged_table['aper_sum_bkgsub_5.5as']/np.sqrt(2*np.pi*((5.5/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_5.5as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_5.75as']=merged_table['aper_sum_bkgsub_5.75as']/np.sqrt(2*np.pi*((5.75/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_5.75as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_6.0as']=merged_table['aper_sum_bkgsub_6.0as']/np.sqrt(2*np.pi*((6.0/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_6.0as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
+	merged_table['aper_snr_10as']=merged_table['aper_sum_bkgsub_10as']/np.sqrt(2*np.pi*((10.0/0.768)*merged_table['ann_bkg_std']/merged_table['aper_sum_bkgsub_10as'])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025)
 	
     
 	#calculate max snr for all apertures

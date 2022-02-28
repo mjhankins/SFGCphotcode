@@ -248,69 +248,24 @@ for info in field._registry:
 
     else:
         daoTab=None
-      
-    '''
-    #Source coordinates need to be in the form of skycoord objects to create apertures. Ascii tables save as strings so this code puts them back in the right form. 
-    scseg=[]
-    if segTab is not None:
-        sourcecoords=segTab['sky_centroid']
-    
-        for coord in sourcecoords:
-            pos=coord.find(",")
-            ra=coord[:pos]
-            dec=coord[pos+1:]
-            scobj=SkyCoord(ra,dec,unit=u.deg)
-            scseg.append(scobj)
-    
-        segTab['skycoords']=scseg
-        sourcesseg=segTab['skycoords']
-    
-
-    scdao=[]
-    if daoTab is not None:
-        sourcecoords=daoTab['sky_centroid']
-        for coord in sourcecoords:
-            pos=coord.find(",")
-            ra=coord[:pos]
-            dec=coord[pos+1:]
-            scobj=SkyCoord(ra,dec,unit=u.deg)
-            scdao.append(scobj)
         
-        daoTab['skycoords']=scdao
-        sourcesdao=daoTab['skycoords']
-    '''
+    if os.path.isfile(name+'_'+str(wavelength)+'um_usrCat.fits'):   
+        usrTab=Table.read(name+'_'+str(wavelength)+'um_usrCat.fits')
+
+    else:
+        usrTab=None
+        print('No user defined DS9 sources found')
+      
+
     #get source coordinates
     if segTab is not None:
         sourcesseg=segTab['sky_centroid']
         
     if daoTab is not None:
         sourcesdao=daoTab['sky_centroid']
-    
-    #check if user defined ds9 file exists
-    if os.path.isfile(name+'_'+str(wavelength)+'um_usrCat.dat'):
-        usrTab=ascii.read(name+'_'+str(wavelength)+'um_usrCat.dat')
-    else:
-        usrTab=None
-    
-    scusr=[]
+        
     if usrTab is not None:
-        sourcecoords=usrTab['sky_centroid']
-    
-        for coord in sourcecoords:
-            pos=coord.find(",")
-            ra=coord[:pos]
-            dec=coord[pos+1:]
-            scobj=SkyCoord(ra,dec,unit=u.deg)
-            scusr.append(scobj)
-    
-        usrTab['skycoords']=scusr
-        sourcesusr=usrTab['skycoords']
-                
-        usersources=True
-        print('Number of user defined DS9 sources found: ', len(clist))  
-    else:
-        usersources=False
-        print('No user defined DS9 sources found')
+        sourcesusr=usrTab['sky_centroid']
         
 
     #create background model for image using median method
@@ -383,9 +338,9 @@ for info in field._registry:
         daoTab.write(name+'_'+str(wavelength)+'um_daoCat_psf.fits',overwrite=True)
         #ascii.write(daoTab,name+'_'+str(wavelength)+'um_daoCat_psf.dat',overwrite=True)
     
-    if usersources:
+    if usrTab is not None:
         #perform psf photometry
-        cuts,resid,vcuts,modpar = doGaussian2DModel(daoTab,size,plot=interactive)
+        cuts,resid,vcuts,modpar = doGaussian2DModel(usrTab,size,plot=interactive)
 
         #add results to table
         usrTab['Cutouts']=cuts
