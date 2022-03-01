@@ -93,46 +93,57 @@ def doGaussian2DModel(Tab,size,plot=False):
         y = np.linspace(0, size-1, size)
         x, y = np.meshgrid(x, y)
         
-        #try fit with all parameters allowed to vary
-        try:
-            popt, pcov = opt.curve_fit(Gaussian2D, (x, y), cutout.data.ravel(), p0=initial_guess)
-            qflag=0
-        except RuntimeError:
-            popt=[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
+        #check size of cutout before proceeding
+        if len(cutout.data.ravel()) == 121:
             
-        data_fitted = Gaussian2D((x, y), *popt)
-        
-        
-        #if fit fails then try running with fixed position     
-        if popt[0] is np.nan:
-            ig2 = (Tab["aperture_sum_3.5as"][i]/62.,4,4,0,0.15)
+            #try fit with all parameters allowed to vary
             try:
-                popt, pcov = opt.curve_fit(Gaussian2Dfixedpos, (x, y), cutout.data.ravel(), p0=ig2)
-                data_fitted = Gaussian2Dfixedpos((x, y), *popt)
-                qflag=1
+                popt, pcov = opt.curve_fit(Gaussian2D, (x, y), cutout.data.ravel(), p0=initial_guess)
+                qflag=0
             except RuntimeError:
                 popt=[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
-                qflag=3
-                
-        '''
-        xfit=int(size/2.0)-popt[1]
-        yfit=int(size/2.0)-popt[2]
-
-        #if it seems like we're at the wrong source try refittingn at center  
-        if np.abs(xfit)>6. or np.abs(yfit)>6.:
-            ig2 = (Tab["aperture_sum_3.5as"][i]/62.,4,4,0,0.15)
-            try:
-                popt, pcov = opt.curve_fit(Gaussian2Dfixedpos, (x, y), cutout.data.ravel(), p0=ig2)
-                data_fitted = Gaussian2Dfixedpos((x, y), *popt)
+                pcov=np.zeros((7,7))
                 qflag=2
-            except RuntimeError:
-                #popt=[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
-                donothing=1
-                qflag=4
-        '''
             
-        residual = cutout.data - data_fitted.reshape(size, size)
-        fiterr=np.sqrt(np.diagonal(pcov)*np.sum(residual**2)/(np.shape(cutout.data.ravel())[0]-5))
+            data_fitted = Gaussian2D((x, y), *popt)
+        
+        
+            #if fit fails then try running with fixed position     
+            if popt[0] is np.nan:
+                ig2 = (Tab["aperture_sum_3.5as"][i]/62.,4,4,0,0.15)
+                try:
+                    popt, pcov = opt.curve_fit(Gaussian2Dfixedpos, (x, y), cutout.data.ravel(), p0=ig2)
+                    data_fitted = Gaussian2Dfixedpos((x, y), *popt)
+                    qflag=1
+                except RuntimeError:
+                    popt=[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
+                    pcov=np.zeros((7,7))
+                    qflag=3
+                
+            '''
+            xfit=int(size/2.0)-popt[1]
+            yfit=int(size/2.0)-popt[2]
+
+            #if it seems like we're at the wrong source try refittingn at center  
+            if np.abs(xfit)>6. or np.abs(yfit)>6.:
+                ig2 = (Tab["aperture_sum_3.5as"][i]/62.,4,4,0,0.15)
+                try:
+                    popt, pcov = opt.curve_fit(Gaussian2Dfixedpos, (x, y), cutout.data.ravel(), p0=ig2)
+                    data_fitted = Gaussian2Dfixedpos((x, y), *popt)
+                    qflag=2
+                except RuntimeError:
+                    #popt=[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
+                    donothing=1
+                    qflag=4
+            '''
+            
+            residual = cutout.data - data_fitted.reshape(size, size)
+            fiterr=np.sqrt(np.diagonal(pcov)*np.sum(residual**2)/(np.shape(cutout.data.ravel())[0]-5))
+        else:
+            qflag=-1
+            popt=[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]
+            pcov=np.zeros((7,7))
+            fiterr=[-1,-1,-1,-1,-1,-1,-1]
         
         if qflag==0:
             
@@ -183,9 +194,17 @@ def doGaussian2DModel(Tab,size,plot=False):
         model=[volume,volerr,xfwhm,xfwhmerr,yfwhm,yfwhmerr,fitAmp,fitAmperr,xfit,xfiterr,yfit,yfiterr,theta,theta_err,
                dcOffset,dco_err,qflag]
         
-        cutouts.append(cutout.data)
-        residuals.append(residual)
-        varcuts.append(varcut.data)
+        #check size of cutout before proceeding
+        if len(cutout.data.ravel()) == 121:
+            cutouts.append(cutout.data)
+            residuals.append(residual)
+            varcuts.append(varcut.data)
+        else:
+            cutouts.append(np.ones((11,11)))
+            residuals.append(np.ones((11,11)))
+            varcuts.append(np.ones((11,11)))
+                
+
         params.append(model)
         
         

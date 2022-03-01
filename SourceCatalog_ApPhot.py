@@ -571,14 +571,21 @@ for info in field._registry:
 
     
     if usersources:
-        UserPhotTable=performApPhoto(data,ds9sc,radii,plot=interactive)
+        UserPhotTable=performApPhoto(data,wcsmap,ds9sc,radii,plot=interactive)
+        
+        #add sky_centriod to table
+        UserPhotTable['sky_centroid']=ds9sc
+        xs,ys=ds9sc.to_pixel(wcsmap)
+        UserPhotTable['xcentroid']=xs
+        UserPhotTable['ycentroid']=ys
+        
     
         #display the table
         if interactive:
             print('\nPhotometry table for user defined sources in ds9.')
             print(UserPhotTable)
 
-        mtds9=modTabCol2(UserPhotTable)
+        usrCat=modTabCol2(UserPhotTable)
         
         #mtds9=doPSFphoto(data_bkgsub,bkg,mtds9,2.0)
  
