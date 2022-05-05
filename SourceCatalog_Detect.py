@@ -152,7 +152,7 @@ for info in field._registry:
     sigma = 3.0 * gaussian_fwhm_to_sigma  # FWHM = 3.
     kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
     kernel.normalize()
-    segm = detect_sources(data_bkgsub, threshold, mask=mask, npixels=5, filter_kernel=kernel)
+    segm = detect_sources(data_bkgsub, threshold, mask=mask, npixels=5, kernel=kernel)
     
     #removed labels that exist in masked region
     if m2lims is not None:
@@ -163,7 +163,7 @@ for info in field._registry:
 
     #lets take a look at deblending sources
     if segm is not None:
-        segm_deblend = deblend_sources(data_bkgsub, segm, npixels=5,filter_kernel=kernel, nlevels=64,contrast=0.001)
+        segm_deblend = deblend_sources(data_bkgsub, segm, npixels=5,kernel=kernel, nlevels=64,contrast=0.001)
     else:
         segm_deblend=None #if segm is empty pass it on to avoid errors
 
