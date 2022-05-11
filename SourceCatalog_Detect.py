@@ -155,7 +155,7 @@ for info in field._registry:
 
     #create background model for image using median method
     bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
-    bkg_data = Background2D(data,(bkgbox, bkgbox), filter_size=(3, 3),bkg_estimator=bkg_estimator,edge_method='pad')
+    bkg_data = Background2D(data,(bkgbox, bkgbox), filter_size=(5, 5),bkg_estimator=bkg_estimator,edge_method='pad')
     bkg_rms=bkg_data.background_rms
     bkg=bkg_data.background 
     
@@ -298,7 +298,7 @@ for info in field._registry:
     
     #First, create a mask for the data
     #Make a cut based on exposure time. Note this is more agressive than SEG because we can't use 2D background with DAO or IRAF
-    maskTPS=np.where(tmapnorm<0.5,tmapnorm,0).astype('bool')
+    maskTPS=np.where(tmapnorm<0.75,tmapnorm,0).astype('bool')
 
     #create a single mask from the combination of mask parameters specified in the config file
     if m3lims is not None:
@@ -313,10 +313,10 @@ for info in field._registry:
     
 
     #get standard devaition of image to specify detection threshold
-    std = np.median(bkg_rms) # use rms map value from background model - must be single value becuase methods don't allow for passing an array
+    #std = np.median(bkg_rms) # use rms map value from background model - must be single value becuase methods don't allow for passing an array
 
     #Alternatively - use sigma_clipped_stats on the image to estimate background 
-    #mean, median, std = sigma_clipped_stats(data_bkgsub, sigma=5.0)  
+    mean, median, std = sigma_clipped_stats(data_bkgsub, sigma=3.0)  
     
     
     #now run starfinder routines to find sources 
@@ -505,11 +505,11 @@ for info in field._registry:
             #create combined list
             mergeTab=vstack([tab1,tab2,tab3])
         elif t1 is False:
-            CombTab=vstack([tab2,tab3])
+            mergeTab=vstack([tab2,tab3])
         elif t2 is False:
-            CombTab=vstack([tab1,tab3])
+            mergeTab=vstack([tab1,tab3])
         elif t3 is False:
-            CombTab=vstack([tab1,tab2])
+            mergeTab=vstack([tab1,tab2])
         else:
             print('Throw error! position 1')
             
@@ -533,7 +533,7 @@ for info in field._registry:
         MLtype=mergeTab['type']
 
         idx,rdx, d2d, d3d = mergeList1.search_around_sky(ds9sc, 3*u.arcsec)
-        print('Number of crossmatched sources found: ', len(idx))
+        print('Number of crossmatched User/Previous sources found: ', len(idx))
 
     
         notrdx=findNOTindex(mergeList1,rdx)
