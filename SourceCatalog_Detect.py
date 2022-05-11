@@ -514,14 +514,14 @@ for info in field._registry:
             print('Throw error! position 1')
             
     elif SEGsources is None:
-        CombTab=Table()
-        CombTab['sky_centroid']=DAOsources['sky_centroid']
-        CombTab['type']='D'
+        mergeTab=Table()
+        mergeTab['sky_centroid']=DAOsources['sky_centroid']
+        mergeTab['type']='D'
         
     elif DAOsources is None:
-        CombTab=Table()
-        CombTab['sky_centroid']=SEGsources['sky_centroid']
-        CombTab['type']='S'
+        mergeTab=Table()
+        mergeTab['sky_centroid']=SEGsources['sky_centroid']
+        mergeTab['type']='S'
         
     else:
         print('Danger, unexpected behavior...')
