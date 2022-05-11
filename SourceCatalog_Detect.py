@@ -580,7 +580,11 @@ for info in field._registry:
         print('No user Sources Defined')
     
     
-    #write out the resulting table to file
-    CombTab.write(name+'_'+str(wavelength)+'um_CombinedSources.fits',overwrite=True)
+    if CombTab is not None:
+        #add id column to table before saving
+        CombTab['id']= np.arange(1, len(CombTab) + 1)
+    
+        #write out the resulting table to file
+        CombTab.write(name+'_'+str(wavelength)+'um_CombinedSources.fits',overwrite=True)
     
 
