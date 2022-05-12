@@ -179,6 +179,70 @@ def performApPhoto(data,tmap,wcs,sourceCoords,radii,rin,rout,plot=True):
 	return phot_table
 
 
+def fitshapes(image,tab,plot=False):
+    columns = ['xcentroid', 'ycentroid','fwhm' ,'semimajor_sigma','semiminor_sigma', 'orientation']
+    
+    #initialize table with correct column formatting by creating dummy table
+    from photutils.datasets import make_4gaussians_image
+    data = make_4gaussians_image()[43:79, 76:104]
+    cat = data_properties(data)
+    tbl = cat.to_table(columns=columns)
+    tbl.remove_row(0) #remove entry from dummy table
+    
+    #fix keywords in table if they don't match what is expected
+    if 'xcentroid' not in tab.columns:
+        tab.rename_column('xcenter', 'xcentroid')
+        tab.rename_column('ycenter', 'ycentroid')
+    
+    #loop through sources and fit shapes
+    for source in tab:
+        #create data cutout around source centroid position
+        spos=(np.int64(source['xcentroid']),np.int64(source['ycentroid']))
+        cutout=Cutout2D(image,spos,9) #there is some influcence of how large the cutout is selected to be...
+        
+        #do addtional bkg subtraciton here? - think not for now...
+        #mean, median, std = sigma_clipped_stats(cutout.data, sigma=3.0)
+        #cutout.data -= median
+        
+        #get shape fitting results and store to table
+        cat = data_properties(cutout.data)
+        temp = cat.to_table(columns=columns)
+        tbl=vstack([tbl,temp])
+
+        #optional plots for visual diagnostics
+        if plot==True:
+            position = (cat.xcentroid, cat.ycentroid)
+            r = 1.0  # approximate isophotal extent
+            a = cat.semimajor_sigma.value * r
+            b = cat.semiminor_sigma.value * r
+            theta = cat.orientation.to(u.rad).value
+            apertures = EllipticalAperture(position, a, b, theta=theta)
+            plt.imshow(cutout.data, origin='lower', cmap='viridis',interpolation=None)
+            apertures.plot(color='r')
+            plt.show()
+     
+    
+    #if needed, rename duplicate columns from seg table
+    if 'fwhm' in tab.columns:
+        tab.rename_column('fwhm', 'fwhm_seg')
+    if 'semimajor_sigma' in tab.columns:
+        tab.rename_column('semimajor_sigma', 'semimajor_sigma_seg')
+    if 'semiminor_sigma' in tab.columns:
+        tab.rename_column('semiminor_sigma', 'semiminor_sigma_seg')        
+    if 'orientation' in tab.columns:
+        tab.rename_column('orientation', 'orientation_seg')        
+        
+    #add fitted shape parameters to table
+    tab['fit_x_cent']=tbl['xcentroid']
+    tab['fit_y_cent']=tbl['ycentroid']        
+    tab['fwhm']=tbl['fwhm']    
+    tab['semimajor_sigma']=tbl['semimajor_sigma']
+    tab['semiminor_sigma']=tbl['semiminor_sigma']
+    tab['orientation']=tbl['orientation']
+
+    #return input table with new columns from shape fitting
+    return tab
+
 
 ####------------------------Start of main-------------------------------------
 for info in field._registry:
@@ -259,7 +323,8 @@ for info in field._registry:
     #merge Tables
     mtComb = join(combTab, CombPhotTable, keys='id')
     
-    #mtComb=doPSFphoto(data_bkgsub,bkg,mtComb,2.0)
+    #add shape parameters to table
+    mtComb=fitshapes(data_bkgsub,mtComb) #optional plot=True for diagnostic plots
     
     #write out catalog 
     mtComb.write(name+'_'+str(wavelength)+'um_CombCat.fits', overwrite=True)
@@ -298,7 +363,8 @@ for info in field._registry:
         #merge Tables
         mtSeg = join(segTab, SegPhotTable, keys='id')
         
-        #mtSeg=doPSFphoto(data_bkgsub,bkg,mtSeg,2.0)
+        #add shape parameters to table
+        mtSeg=fitshapes(data_bkgsub,mtSeg) #optional plot=True for diagnostic plots
         
         #write out the resulting tables to file
         mtSeg.write(name+'_'+str(wavelength)+'um_segCat.fits',overwrite=True)
@@ -325,7 +391,8 @@ for info in field._registry:
         #merge Tables
         mtDao = join(daoTab, DaoPhotTable, keys='id')
         
-        #mtDao=doPSFphoto(data_bkgsub,bkg,mtDao,2.0)
+        #add shape parameters to table
+        mtDao=fitshapes(data_bkgsub,mtDao) #optional plot=True for diagnostic plots
             
         #write out the resulting tables to file
         mtDao.write(name+'_'+str(wavelength)+'um_daoCat.fits',overwrite=True)
