@@ -17,26 +17,21 @@ from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.visualization import SqrtStretch, simple_norm
 from astropy.visualization.mpl_normalize import ImageNormalize
 from astropy.io import fits,ascii
-from astropy.table import Table
+from astropy.table import Table, join, vstack
 from astropy.wcs import WCS
 from astropy import units as u
 from astropy.stats import sigma_clipped_stats
-from astropy.table import join, Table
 from astropy.coordinates import SkyCoord
+from astropy.nddata import Cutout2D
 
 from photutils.aperture import SkyCircularAperture,SkyCircularAnnulus,aperture_photometry 
 from photutils.segmentation import detect_threshold, detect_sources, deblend_sources, SourceCatalog
 from photutils.background import Background2D, MedianBackground, SExtractorBackground, MMMBackground
 from photutils.utils import calc_total_error
+from photutils.morphology import data_properties
 
 from regions import read_ds9
 from regions import read_ds9, write_ds9, CircleSkyRegion
-
-from photutils.psf import DAOGroup, IntegratedGaussianPRF
-from astropy.modeling.fitting import LevMarLSQFitter
-from photutils.psf import BasicPSFPhotometry
-from photutils.datasets import make_gaussian_sources_image
-from astropy.nddata import Cutout2D
 
 #import configuration for selected file
 from config import wavelength, segdetsig, finddetsig, bkgbox #import additional common paramters
