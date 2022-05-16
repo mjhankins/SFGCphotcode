@@ -282,13 +282,17 @@ for info in field._registry:
     
     
     #create background model for image using median method
-    bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
-    bkg_data = Background2D(data,(bkgbox, bkgbox), filter_size=(5, 5),bkg_estimator=bkg_estimator,edge_method='pad') #smaller box?, 20x20, 25x25?
-    bkg_rms=bkg_data.background_rms
-    bkg=bkg_data.background 
+    #bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
+    #bkg_data = Background2D(data,(bkgbox, bkgbox), filter_size=(5, 5),bkg_estimator=bkg_estimator,edge_method='pad') #smaller box?, 20x20, 25x25?
+    #bkg_rms=bkg_data.background_rms
+    #bkg=bkg_data.background 
 
     #create background subtracted image for photometry
-    data_bkgsub = data - bkg
+    #data_bkgsub = data - bkg
+    
+    #do background subtraciton 
+    mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+    data_bkgsub = data - median
     
     #specify radii to use with source measurements
     radii = [4,7,12] #aperture radii to use in photoemtry - units are pixels
