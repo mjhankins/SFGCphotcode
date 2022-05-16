@@ -43,6 +43,27 @@ interactive=False
 
 ####-------------------------functions-------------------------------------
 
+#Now add RA, DEC coordinates of sources to table
+def addSkyCentroid(tab,wcsmap):
+    if 'sky_centroid' in tab.columns:
+        print('this table already has sky centroid column!')
+    else:
+        #Now add RA, DEC coordinates of sources to table
+        if len(tab)>0:
+
+            Nsources=len(tab)
+            scs=[]
+
+            for i in range(0,Nsources):
+                xcoord=tab['xcentroid'][i]
+                ycoord=tab['ycentroid'][i]
+                sc=pixel_to_skycoord(xcoord,ycoord,wcsmap)
+                scs.append(sc)
+
+            tab['sky_centroid']=scs
+        
+    return tab
+
 # functions for creating ds9 region files
 def makeDS9reg(tab,radius,outname,color=None):
     #get source coordinates from table
@@ -152,7 +173,6 @@ for info in field._registry:
         ax3.set_axis_off()
         plt.show()
     
-
     #create background model for image using median method
     bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
     bkg_data = Background2D(data,(bkgbox, bkgbox), filter_size=(5, 5),bkg_estimator=bkg_estimator,edge_method='pad')
@@ -180,9 +200,106 @@ for info in field._registry:
         ax3.set_title('Data - Bkg. Model')
         ax3.imshow(data_bkgsub,origin='lower',vmin=minval,vmax=maxval)
         plt.show()
+        
+    
+    ###----------------------- DAO/IRAF Star Finders --------------------------------
+    
+    #First, create a mask for the data
+    #Make a cut based on exposure time. Note this is more agressive than SEG because we can't use 2D background with DAO or IRAF
+    tmapnorm=tmap/np.max(tmap) #creating a normalized exposure time map for the mask
+    maskTPS=np.where(tmapnorm<0.75,tmapnorm,0).astype('bool')
+    
+    mask2=np.zeros(np.shape(maskTPS))
+    mask3=np.zeros(np.shape(maskTPS))
+
+    #create a single mask from the combination of mask parameters specified in the config file
+    if m3lims is not None:
+        maskPS=(maskTPS == 1) | (mask2 == 1) | (mask3 == 1)
+    elif m2lims is not None:
+        maskPS=(maskTPS == 1) | (mask2 == 1)
+    else:
+        maskPS=(maskTPS == 1)
+
+    #create masked array for the background subtracted data
+    data_bkgsub_ma = np.ma.masked_array(data_bkgsub, mask=maskPS)
+
+    #get standard devaition of image to specify detection threshold
+    #std = np.median(bkg_rms) # use rms map value from background model - must be single value becuase methods don't allow for passing an array
+
+    #Alternatively - use sigma_clipped_stats on the image to estimate background for source finding
+    mean, median, std = sigma_clipped_stats(data_bkgsub, sigma=3.0)      
+        
+    #now run starfinder routines to find sources 
+    daofind = DAOStarFinder(fwhm=4, threshold=finddetsig*std)
+    DAOsources = daofind(data_bkgsub_ma,mask=maskPS)
+
+    StarFinder = IRAFStarFinder(fwhm=4, threshold=finddetsig*std)
+    IRAFsources = StarFinder(data_bkgsub_ma,mask=maskPS)    
+        
+    if interactive:
+        #plot data with apertures on detected sources
+        if DAOsources is not None:
+            Dpositions = np.transpose((DAOsources['xcentroid'], DAOsources['ycentroid']))
+            Dapertures = CircularAperture(Dpositions, r=4.)
+
+        if IRAFsources is not None:
+            Ipositions = np.transpose((IRAFsources['xcentroid'], IRAFsources['ycentroid']))
+            Iapertures = CircularAperture(Ipositions, r=4.)
+
+
+        norm = ImageNormalize(stretch=SqrtStretch())
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+
+        ax1.imshow(data_bkgsub, origin='lower', cmap='Greys_r',norm=norm)
+        ax1.set_title('DAOfind Sources')
+        if DAOsources is not None:
+            Dapertures.plot(color='magenta', lw=1.5, alpha=0.5,axes=ax1)
+
+        ax2.imshow(data_bkgsub, origin='lower', cmap='Greys_r',norm=norm)
+        ax2.set_title('IRAF StarFind Sources')
+        if IRAFsources is not None:
+            Iapertures.plot(color='cyan', lw=1.5, alpha=0.5,axes=ax2)
+
+        plt.show()
+        
+    #add skycoords to source tables
+    DAOsources=addSkyCentroid(DAOsources,wcsmap)
+    IRAFsources=addSkyCentroid(IRAFsources,wcsmap)
+    
+    #print the number of sources found
+    if DAOsources is not None:
+        print('Number of DAOfind sources found: ', len(DAOsources))
+      
+        #convert Qtable to table so we can write as fits
+        #nDAOsources=Table(DAOsources)
+        #nDAOsources.write(name+'_'+str(wavelength)+'um_dao.fits',overwrite=True)
+
+        #save a ds9 regions file for the sources
+        txt2=makeDS9reg(DAOsources,0.00083333,name+'_daoFind.reg','magenta') #r=3"
+    else:
+        print('Number of DAOfind Sources found: 0')
+        txt2=[]
+        
+        #print the number of sources found
+    if IRAFsources is not None:
+        print('Number of IRAFfind sources found: ', len(IRAFsources))
+      
+        #convert Qtable to table so we can write as fits
+        #nDAOsources=Table(DAOsources)
+        #nDAOsources.write(name+'_'+str(wavelength)+'um_iraf.fits',overwrite=True)
+
+        #save a ds9 regions file for the sources
+        txt3=makeDS9reg(IRAFsources,0.00083333,name+'_irafFind.reg','cyan') #r=3"
+    else:
+        print('Number of IRAFfind Sources found: 0')
+        txt2=[]
+        
+        
+    ###------------------------- SEG MAP ----------------------------------    
+        
     
     #create mask for 'bad' parts of the image (e.g., edges of field where dithers don't overlap well)
-    tmapnorm=tmap/np.max(tmap) #creating a normalized exposure time map for the mask
     mask=np.where(tmapnorm<m1cut,tmapnorm,0).astype('bool') #create mask for any locations less than specified fraction of total integration time
     #note this can be adjusted in the config file parameters
 
@@ -213,7 +330,6 @@ for info in field._registry:
     else:
         segm_deblend=None #if segm is empty pass it on to avoid errors
 
-    
     if interactive:
         #make plot of segmentation image to show detected sources side by side with data
         norm = ImageNormalize(stretch=SqrtStretch())
@@ -228,65 +344,18 @@ for info in field._registry:
     #Build a table from the deblended segmentation map
     if segm is not None:    
         catwerr = SourceCatalog(data_bkgsub, segm_deblend,background=bkg,error=errormap,wcs=wcsmap)
-        columns=['label','xcentroid','ycentroid','sky_centroid','background_centroid', 'background_mean','background_sum','background', 'area',
-                 'semimajor_sigma','semiminor_sigma','orientation', 'cxx','cxy','cyy','eccentricity','ellipticity','elongation',
-                 'fwhm','kron_flux','kron_fluxerr','kron_radius','segment_flux','segment_fluxerr']#Specify table columns
+        #columns=['label','xcentroid','ycentroid','sky_centroid','background_centroid', 'background_mean','background_sum','background', 'area','semimajor_sigma','semiminor_sigma','orientation', 'cxx','cxy','cyy','eccentricity','ellipticity','elongation','fwhm','kron_flux','kron_fluxerr','kron_radius','segment_flux','segment_fluxerr']#Specify table columns
+        columns=['label','xcentroid','ycentroid','sky_centroid']
         SEGsources= catwerr.to_table(columns)
-    
-        #calculate statistics for background cutouts in table
-        segbkg_median=[]
-        segbkg_mean=[]
-        segbkg_std=[]
-    
-        #loop through each cutout and use sigma_cliped_stats to get mean, median, and std
-        for i in range (0,len(SEGsources['background'])):
-            bkgdata=SEGsources['background'][i]
-            meansc, median_sigclip, stdsc = sigma_clipped_stats(bkgdata)
-            segbkg_median.append(median_sigclip)
-            segbkg_mean.append(meansc)
-            segbkg_std.append(stdsc)
-    
-        #add the above calculated information to the table
-        SEGsources['segbkg_mean_sc']=segbkg_mean
-        SEGsources['segbkg_median_sc']=segbkg_median
-        SEGsources['segbkg_std_sc']=segbkg_std  
-
-        #remove the 2d background array to tidy up the table
-        SEGsources.remove_column('background')
-
-    
-        #calculate noise stats - Think about removing this because it hasn't been very useful...
-
-
-        #sky noise from background
-        skynoise=np.sqrt(SEGsources['segbkg_std_sc']*SEGsources['area']/u.pix**2)
-        #replace any nan values with zero
-        sna=np.array(skynoise)
-        masknan=np.isnan(sna)
-        sna[masknan]=0.0
-        skynoise=sna**2
-
-        #shot noise from the source
-        sourcenoise=SEGsources['segment_flux']
-
-        #thermal noise from camera (from error map)
-        thermalnoise=SEGsources['segment_fluxerr']
-
-        #total noise
-        #totalnoise=np.sqrt(sourcenoise+thermalnoise+skynoise) #includes all noise sources
-        totalnoise=np.sqrt(thermalnoise+skynoise) #no source noise 
-
-        #calculate SNR for the segments
-        SEGsources['segmentSNR']=SEGsources['segment_flux']/ totalnoise 
-                
+                 
         #print the number of sources found
         print('Number of segmentation map sources found: ', len(SEGsources))
         
         #convert Qtable to Table so it can be written as fits
-        SEGsources=Table(SEGsources)
+        #SEGsources=Table(SEGsources)
 
         #write out the resulting table to file
-        SEGsources.write(name+'_'+str(wavelength)+'um_seg.fits',overwrite=True)
+        #SEGsources.write(name+'_'+str(wavelength)+'um_seg.fits',overwrite=True)
 
         #save a ds9 regions file for the sources
         txt1=makeDS9reg(SEGsources,0.00083333,name+'_segFind.reg','red') #r=3"
@@ -294,37 +363,7 @@ for info in field._registry:
         SEGsources=None
         txt1=[]
       
-    #now move to source finding with DAO/IRAF
     
-    #First, create a mask for the data
-    #Make a cut based on exposure time. Note this is more agressive than SEG because we can't use 2D background with DAO or IRAF
-    maskTPS=np.where(tmapnorm<0.75,tmapnorm,0).astype('bool')
-
-    #create a single mask from the combination of mask parameters specified in the config file
-    if m3lims is not None:
-        maskPS=(maskTPS == 1) | (mask2 == 1) | (mask3 == 1)
-    elif m2lims is not None:
-        maskPS=(maskTPS == 1) | (mask2 == 1)
-    else:
-        maskPS=(maskTPS == 1)
-
-    #create masked array for the background subtracted data
-    data_bkgsub_ma = np.ma.masked_array(data_bkgsub, mask=maskPS)
-    
-
-    #get standard devaition of image to specify detection threshold
-    #std = np.median(bkg_rms) # use rms map value from background model - must be single value becuase methods don't allow for passing an array
-
-    #Alternatively - use sigma_clipped_stats on the image to estimate background 
-    mean, median, std = sigma_clipped_stats(data_bkgsub, sigma=3.0)  
-    
-    
-    #now run starfinder routines to find sources 
-    daofind = DAOStarFinder(fwhm=4.2, threshold=finddetsig*std)
-    DAOsources = daofind(data_bkgsub_ma,mask=maskPS)
-
-    StarFinder = IRAFStarFinder(fwhm=4.2, threshold=finddetsig*std)
-    IRAFsources = StarFinder(data_bkgsub_ma,mask=maskPS)
 
     #plot data with apertures on detected sources
     if DAOsources is not None:
@@ -355,50 +394,13 @@ for info in field._registry:
 
         plt.show()
     
-    
-    #lets add ra, dec coordinates of sources to DAOsources table
-    if DAOsources is None:
-        Nsources=0
-    else:
-        Nsources=len(DAOsources['id'])
-        
-    scs=[]
-    
-    for i in range(0,Nsources):
-        xcoord=DAOsources['xcentroid'][i]
-        ycoord=DAOsources['ycentroid'][i]
-        sc=pixel_to_skycoord(xcoord,ycoord,wcsmap)
-        scs.append(sc)
-        
-    if DAOsources is not None:
-        DAOsources['sky_centroid']=scs
-    
-        #change format of columns to save fewer decimal places
-        for col in DAOsources.colnames:
-            if col!='sky_centroid': #skip sky centroid since its problematic in this context
-                DAOsources[col].info.format = '%.4G'
-            
-    #print the number of sources found
-    if DAOsources is not None:
-        print('Number of DAOfind sources found: ', len(DAOsources))
-      
-        #convert Qtable to table so we can write as fits
-        nDAOsources=Table(DAOsources)
-        nDAOsources.write(name+'_'+str(wavelength)+'um_dao.fits',overwrite=True)
-
-        #save a ds9 regions file for the sources
-        txt2=makeDS9reg(DAOsources,0.00083333,name+'_daoFind.reg','cyan') #r=3"
-    else:
-        print('Number of DAOfindSources found: 0')
-        txt2=[]
-    
    
     #open ds9 and load in the region file that was just saved
     if interactive:
         if ds9path is not None:
             
             savename=name+'.reg'
-            makeCombDS9file(t1,t2,savename)  
+            makeCombDS9file(t1,t2,t3,savename)  
     
             p1=subprocess.Popen(ds9path+' '+filename+ ' -mode region -regions load '+name+'.reg', shell=True) 
             p1.wait()
@@ -428,54 +430,68 @@ for info in field._registry:
      
     
         #plot data with sources found in each method used
-    if DAOsources is not None:
-        Dpositions = np.transpose((DAOsources['xcentroid'], DAOsources['ycentroid']))
-        Dapertures = CircularAperture(Dpositions, r=4.)
-
-    if SEGsources is not None:
-        Spositions = np.transpose((SEGsources['xcentroid'], SEGsources['ycentroid']))
-        Sapertures = CircularAperture(Spositions, r=4.)
-
-    if usersources:
-        Upositions=np.transpose(skycoord_to_pixel(ds9sc,wcsmap))
-        Uapertures = CircularAperture(Upositions, r=4.)
-
-    norm = ImageNormalize(stretch=SqrtStretch())
-
     if interactive:
-        fig, (ax1, ax2,ax3) = plt.subplots(1, 3, figsize=(16, 10))
-        ax1.imshow(data, origin='lower', cmap='Greys_r', norm=norm)
-        ax1.set_title('Seg. map Sources')
+        #plot data with sources found in each method used
+        if DAOsources is not None:
+            Dpositions = np.transpose((DAOsources['xcentroid'], DAOsources['ycentroid']))
+            Dapertures = CircularAperture(Dpositions, r=4.)
+
+        if IRAFsources is not None:
+            Ipositions = np.transpose((IRAFsources['xcentroid'], IRAFsources['ycentroid']))
+            Iapertures = CircularAperture(Dpositions, r=4.)
+
         if SEGsources is not None:
-            Sapertures.plot(color='red', lw=1.5, alpha=0.5,axes=ax1)
+            Spositions = np.transpose((SEGsources['xcentroid'], SEGsources['ycentroid']))
+            Sapertures = CircularAperture(Spositions, r=4.)
+
+        if usersources:
+            Upositions=np.transpose(skycoord_to_pixel(ds9sc,wcsmap))
+            Uapertures = CircularAperture(Upositions, r=4.)
+
+        norm = ImageNormalize(stretch=SqrtStretch())
+
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 12))
+
+        ax1.imshow(data, origin='lower', cmap='Greys_r',norm=norm)
+        ax1.set_title('DAOfind Sources')
+        if DAOsources is not None:
+            Dapertures.plot(color='magenta', lw=1.5, alpha=0.5,axes=ax1)
 
         ax2.imshow(data, origin='lower', cmap='Greys_r',norm=norm)
-        ax2.set_title('DAOfind Sources')
+        ax2.set_title('IRAFfind Sources')
         if DAOsources is not None:
-            Dapertures.plot(color='magenta', lw=1.5, alpha=0.5,axes=ax2)
+            Dapertures.plot(color='cyan', lw=1.5, alpha=0.5,axes=ax2)
 
-        ax3.imshow(data, origin='lower', cmap='Greys_r',norm=norm)
-        ax3.set_title('User Defined Sources')
+        ax3.imshow(data, origin='lower', cmap='Greys_r', norm=norm)
+        ax3.set_title('Seg. map Sources')
+        if SEGsources is not None:
+            Sapertures.plot(color='red', lw=1.5, alpha=0.5,axes=ax3)
+
+        ax4.imshow(data, origin='lower', cmap='Greys_r',norm=norm)
+        ax4.set_title('User Defined Sources')
         if usersources:
-            Uapertures.plot(color='yellow', lw=1.5, alpha=0.5,axes=ax3)
+            Uapertures.plot(color='yellow', lw=1.5, alpha=0.5,axes=ax4)
 
         plt.show()
     
+    ### ------------ label source discovery method -----------------
+    
     #now create a combined list of all sources found by each method
-    if (DAOsources is not None)&(SEGsources is not None):
+    if (DAOsources is not None)&(IRAFsources is not None):   
+    
         #get source coordinates from DAO and SEG
         sourcesDao=DAOsources['sky_centroid']
-        sourcesSeg=SEGsources['sky_centroid']
+        sourcesIRAF=IRAFsources['sky_centroid']
 
         #crossmatch source lists to look for duplication
-        idx,rdx, d2d, d3d = sourcesDao.search_around_sky(sourcesSeg, 3*u.arcsec)
-        print('Number of crossmatched DAO/SEG sources found: ', len(idx))
+        idx,rdx, d2d, d3d = sourcesDao.search_around_sky(sourcesIRAF, 3*u.arcsec)
+        print('Number of crossmatched DAO/IRAF sources found: ', len(idx))
 
         #create tables for sources - start with crossmatched sources
         if len(rdx)>0:
             tab1=Table()
             tab1['sky_centroid']=sourcesDao[rdx]
-            tab1['type']='C' #C - crossmatch
+            tab1['type']=100 #crossmatch IRAF & DAO
             t1=True
         else:
             t1=False
@@ -485,21 +501,20 @@ for info in field._registry:
         if len(notrdx)>0:
             tab2=Table()
             tab2['sky_centroid']=sourcesDao[notrdx]
-            tab2['type']='D' #D - DAO
+            tab2['type']=200 #DAO
             t2=True
         else:
             t2=False
 
         #Find unique sources in list
-        notidx=findNOTindex(sourcesSeg,idx)
+        notidx=findNOTindex(sourcesIRAF,idx)
         if len(notidx)>0:
             tab3=Table()
-            tab3['sky_centroid']=sourcesSeg[notidx]
-            tab3['type']='S' #S - Segment
+            tab3['sky_centroid']=sourcesIRAF[notidx]
+            tab3['type']=300 #IRAF
             t3=True
         else:
             t3=False
-            
 
         if t1&t2&t3:
             #create combined list
@@ -511,58 +526,62 @@ for info in field._registry:
         elif t3 is False:
             mergeTab=vstack([tab1,tab2])
         else:
-            print('Throw error! position 1')
+            print('Throw error! position 1')   
             
-    elif SEGsources is None:
+    elif IRAFsources is None:
         mergeTab=Table()
         mergeTab['sky_centroid']=DAOsources['sky_centroid']
-        mergeTab['type']='D'
+        mergeTab['type']=200
         
     elif DAOsources is None:
         mergeTab=Table()
-        mergeTab['sky_centroid']=SEGsources['sky_centroid']
-        mergeTab['type']='S'
+        mergeTab['sky_centroid']=IRAFsources['sky_centroid']
+        mergeTab['type']=300
         
     else:
         print('Danger, unexpected behavior...')
-
-        
-    if usersources:
-        #now check against user sources to ensure no duplication there. 
-        mergeList1=mergeTab['sky_centroid']
-        MLtype=mergeTab['type']
-
-        idx,rdx, d2d, d3d = mergeList1.search_around_sky(ds9sc, 3*u.arcsec)
-        print('Number of crossmatched User/Previous sources found: ', len(idx))
-
     
-        notrdx=findNOTindex(mergeList1,rdx)
-        if len(notrdx)>0:
+    
+    
+    #now create a combined list of all sources found by each method
+    if (mergeTab is not None)&(SEGsources is not None):
+        #get source coordinates from DAO and SEG
+        Findsources=mergeTab['sky_centroid']
+        sourcesSeg=SEGsources['sky_centroid']
+
+        #crossmatch source lists to look for duplication
+        idx,rdx, d2d, d3d = Findsources.search_around_sky(sourcesSeg, 3*u.arcsec)
+        print('Number of crossmatched Finder sources and Seg sources: ', len(idx))
+
+        #create tables for sources - start with crossmatched sources
+        if len(rdx)>0:
             tab4=Table()
-            #elements only in DAO
-            tab4['sky_centroid']=mergeList1[notrdx]
-            tab4['type']=MLtype[notrdx] #adopt earlier type
+            tab4['sky_centroid']=mergeTab['sky_centroid'][rdx]
+            tab4['type']=mergeTab['type'][rdx]+10
             t4=True
         else:
             t4=False
-    
-        if len(rdx)>0:
+
+        #Find unique sources in list
+        notrdx=findNOTindex(mergeTab,rdx)
+        if len(notrdx)>0:
             tab5=Table()
-            tab5['sky_centroid']=mergeList1[rdx]
-            tab5['type']='A' #A - ALL
+            tab5['sky_centroid']=mergeTab['sky_centroid'][notrdx]
+            tab5['type']=mergeTab['type'][notrdx]+20
             t5=True
         else:
             t5=False
 
-        notidx=findNOTindex(ds9sc,idx)
+        #Find unique sources in list
+        notidx=findNOTindex(sourcesSeg,idx)
         if len(notidx)>0:
             tab6=Table()
-            tab6['sky_centroid']=ds9sc[notidx]
-            tab6['type']='U' #U - user
+            tab6['sky_centroid']=sourcesSeg[notidx]
+            tab6['type']=10
             t6=True
         else:
             t6=False
-        
+
         if t4&t5&t6:
             #create combined table
             CombTab=vstack([tab4,tab5,tab6])
@@ -573,18 +592,79 @@ for info in field._registry:
         elif t4 is False:
             CombTab=vstack([tab5,tab6])
         else:
-            print('Throw error! position 2')
+            print('Throw error! position 2') 
+
+            
+    elif SEGsources is None:
+        CombTab=mergeTab
+        
+    elif Findsources is None:
+        CombTab=Table()
+        CombTab['sky_centroid']=SEGsources['sky_centroid']
+        CombTab['type']=10
+        
+    else:
+        print('Danger, unexpected behavior...')
+
+        
+    if usersources:
+        #now check against user sources to ensure no duplication there. 
+        mergeList1=CombTab['sky_centroid']
+
+        idx, rdx, d2d, d3d = mergeList1.search_around_sky(ds9sc, 3*u.arcsec)
+        print('Number of crossmatched sources found: ', len(idx))    
+        
+        if len(rdx)>0:
+            tab7=Table()
+            tab7['sky_centroid']=CombTab['sky_centroid'][rdx]
+            tab7['type']=CombTab['type'][rdx]+1
+            t7=True
+        else:
+            t7=False
+
+        notrdx=findNOTindex(mergeList1,rdx)
+        if len(notrdx)>0:
+            tab8=Table()
+            tab8['sky_centroid']=CombTab['sky_centroid'][notrdx]
+            tab8['type']=CombTab['type'][notrdx]+0 #not a user source
+            t8=True
+        else:
+            t8=False
+
+
+        notidx=findNOTindex(ds9sc,idx)
+        if len(notidx)>0:
+            tab9=Table()
+            tab9['sky_centroid']=ds9sc[notidx]
+            tab8['type']=1
+            t9=True
+        else:
+            t9=False
+
+
+
+        if t7&t8&t9:
+            #create combined table
+            CombTabNew=vstack([tab7,tab8,tab9])
+        elif t9 is False:
+            CombTabNew=vstack([tab7,tab8])
+        elif t8 is False:
+            CombTabNew=vstack([tab7,tab9])
+        elif t7 is False:
+            CombTabNew=vstack([tab8,tab9])
+        else:
+            print('Throw error! position 3')
 
     else:
-        CombTab=mergeTab
+        CombTabNew=CombTab
         print('No user Sources Defined')
-    
-    
+
+
     if CombTab is not None:
         #add id column to table before saving
-        CombTab['id']= np.arange(1, len(CombTab) + 1)
+        CombTabNew['id']= np.arange(1, len(CombTabNew) + 1)
     
         #write out the resulting table to file
-        CombTab.write(name+'_'+str(wavelength)+'um_CombinedSources.fits',overwrite=True)
+        CombTabNew.write(name+'_'+str(wavelength)+'um_CombinedSources.fits',overwrite=True)
     
 
