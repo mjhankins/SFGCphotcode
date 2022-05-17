@@ -295,7 +295,7 @@ for info in field._registry:
     data_bkgsub = data - median
     
     #specify radii to use with source measurements
-    radii = [4,7,12] #aperture radii to use in photoemtry - units are pixels
+    radii = [4,5,6,7,8,9,10,12] #aperture radii to use in photoemtry - units are pixels
     r_in = 12  #inner radius for background annulus - units are pixels
     r_out = 20  #outer radius for background annulus - units are pixels
     
