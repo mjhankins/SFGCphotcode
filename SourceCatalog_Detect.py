@@ -175,7 +175,7 @@ for info in field._registry:
     
     #create background model for image using median method
     bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
-    bkg_data = Background2D(data,(bkgbox, bkgbox), filter_size=(5, 5),bkg_estimator=bkg_estimator,edge_method='pad')
+    bkg_data = Background2D(data,(5, 5),bkg_estimator=bkg_estimator,edge_method='pad')
     bkg_rms=bkg_data.background_rms
     bkg=bkg_data.background 
     
@@ -227,13 +227,13 @@ for info in field._registry:
     #std = np.median(bkg_rms) # use rms map value from background model - must be single value becuase methods don't allow for passing an array
 
     #Alternatively - use sigma_clipped_stats on the image to estimate background for source finding
-    mean, median, std = sigma_clipped_stats(data_bkgsub, sigma=3.0)      
+    mean, median, std = sigma_clipped_stats(data_bkgsub_ma, sigma=3.0)      
         
     #now run starfinder routines to find sources 
-    daofind = DAOStarFinder(fwhm=4, threshold=finddetsig*std)
+    daofind = DAOStarFinder(fwhm=5, threshold=5.0*std)
     DAOsources = daofind(data_bkgsub_ma,mask=maskPS)
 
-    StarFinder = IRAFStarFinder(fwhm=4, threshold=finddetsig*std)
+    StarFinder = IRAFStarFinder(fwhm=5, threshold=5.0*std)
     IRAFsources = StarFinder(data_bkgsub_ma,mask=maskPS)    
         
     if interactive:
@@ -263,13 +263,13 @@ for info in field._registry:
 
         plt.show()
         
-    #add skycoords to source tables
-    DAOsources=addSkyCentroid(DAOsources,wcsmap)
-    IRAFsources=addSkyCentroid(IRAFsources,wcsmap)
     
     #print the number of sources found
     if DAOsources is not None:
         print('Number of DAOfind sources found: ', len(DAOsources))
+        
+        #add skycoords to source tables
+        DAOsources=addSkyCentroid(DAOsources,wcsmap)
       
         #convert Qtable to table so we can write as fits
         #nDAOsources=Table(DAOsources)
@@ -284,6 +284,9 @@ for info in field._registry:
         #print the number of sources found
     if IRAFsources is not None:
         print('Number of IRAFfind sources found: ', len(IRAFsources))
+        
+        #add skycoords to source tables
+        IRAFsources=addSkyCentroid(IRAFsources,wcsmap)
       
         #convert Qtable to table so we can write as fits
         #nDAOsources=Table(DAOsources)
@@ -300,7 +303,7 @@ for info in field._registry:
         
     
     #create mask for 'bad' parts of the image (e.g., edges of field where dithers don't overlap well)
-    mask=np.where(tmapnorm<m1cut,tmapnorm,0).astype('bool') #create mask for any locations less than specified fraction of total integration time
+    mask=np.where(tmapnorm<0.32,tmapnorm,0).astype('bool') #create mask for any locations less than specified fraction of total integration time
     #note this can be adjusted in the config file parameters
 
     #Use a gaussian to smooth image prior to running the segmentation map - (FWHM 3x3, but can be adjusted in the line below)
@@ -313,16 +316,17 @@ for info in field._registry:
     segm = detect_sources(data_bkgsub, threshold, mask=mask, npixels=5, kernel=kernel)
     
     #remove any that exist in masked region as defined in the config file
-    if m2lims is not None:
-        mask2=np.zeros(np.shape(mask))
-        for lim in m2lims:
-            mask2[lim[0]:lim[1],lim[2]:lim[3]]=1
-        segm.remove_masked_labels(mask2.astype('bool'))
-    if m3lims is not None:
-        mask3=np.zeros(np.shape(mask))
-        for lim in m3lims:
-            mask3[lim[0]:lim[1],lim[2]:lim[3]]=1
-        segm.remove_masked_labels(mask3.astype('bool'))
+    if segm is not None:
+        if m2lims is not None:
+            mask2=np.zeros(np.shape(mask))
+            for lim in m2lims:
+                mask2[lim[0]:lim[1],lim[2]:lim[3]]=1
+            segm.remove_masked_labels(mask2.astype('bool'))
+        if m3lims is not None:
+            mask3=np.zeros(np.shape(mask))
+            for lim in m3lims:
+                mask3[lim[0]:lim[1],lim[2]:lim[3]]=1
+            segm.remove_masked_labels(mask3.astype('bool'))
 
     #lets take a look at deblending sources
     if segm is not None:
