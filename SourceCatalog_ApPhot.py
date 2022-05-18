@@ -173,9 +173,8 @@ def performApPhoto(data,tmap,wcs,sourceCoords,radii,rin,rout,plot=True):
 		plt.show()
 	return phot_table
 
-
 def fitshapes(image,tab,plot=False):
-    columns = ['xcentroid', 'ycentroid','fwhm' ,'semimajor_sigma','semiminor_sigma', 'orientation']
+    columns = ['xcentroid', 'ycentroid','fwhm' ,'semimajor_sigma','semiminor_sigma', 'orientation','covar_sigx2','covar_sigy2']
     
     #initialize table with correct column formatting by creating dummy table
     from photutils.datasets import make_4gaussians_image
@@ -193,14 +192,14 @@ def fitshapes(image,tab,plot=False):
     for source in tab:
         #create data cutout around source centroid position
         spos=(np.int64(source['xcentroid']),np.int64(source['ycentroid']))
-        cutout=Cutout2D(image,spos,9) #there is some influcence of how large the cutout is selected to be...
+        cutout=Cutout2D(image,spos,21,copy=True)
         
         #do addtional bkg subtraciton here? - think not for now...
-        #mean, median, std = sigma_clipped_stats(cutout.data, sigma=3.0)
-        #cutout.data -= median
+        mean, median, std = sigma_clipped_stats(cutout.data, sigma=3.0)
+        c1 = cutout.data - median
         
         #get shape fitting results and store to table
-        cat = data_properties(cutout.data)
+        cat = data_properties(c1,background=std)
         temp = cat.to_table(columns=columns)
         tbl=vstack([tbl,temp])
 
@@ -212,14 +211,14 @@ def fitshapes(image,tab,plot=False):
             b = cat.semiminor_sigma.value * r
             theta = cat.orientation.to(u.rad).value
             apertures = EllipticalAperture(position, a, b, theta=theta)
-            plt.imshow(cutout.data, origin='lower', cmap='viridis',interpolation=None)
+            plt.imshow(c1, origin='lower', cmap='viridis',interpolation=None)
             apertures.plot(color='r')
             plt.show()
-     
     
     #if needed, rename duplicate columns from seg table
     if 'fwhm' in tab.columns:
         tab.rename_column('fwhm', 'fwhm_seg')
+        #print('this already has FWHM column!')
     if 'semimajor_sigma' in tab.columns:
         tab.rename_column('semimajor_sigma', 'semimajor_sigma_seg')
     if 'semiminor_sigma' in tab.columns:
@@ -234,9 +233,14 @@ def fitshapes(image,tab,plot=False):
     tab['semimajor_sigma']=tbl['semimajor_sigma']
     tab['semiminor_sigma']=tbl['semiminor_sigma']
     tab['orientation']=tbl['orientation']
+    tab['covar_sigx2']=tbl['covar_sigx2']
+    tab['covar_sigy2']=tbl['covar_sigy2']
+    
+    tab['fit_dist']=np.sqrt((tbl['xcentroid']-10.5)**2+(tbl['ycentroid']-10.5)**2)
 
     #return input table with new columns from shape fitting
     return tab
+
 
 
 ####------------------------Start of main-------------------------------------
@@ -330,7 +334,7 @@ for info in field._registry:
 
     
     
-    
+    '''
     
     #------------- Do photometry and processing on other files (optional)---------
     
@@ -396,4 +400,4 @@ for info in field._registry:
         #write out the resulting tables to file
         mtDao.write(name+'_'+str(wavelength)+'um_daoCat.fits',overwrite=True)
 
-    
+    '''
