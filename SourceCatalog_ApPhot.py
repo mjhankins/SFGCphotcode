@@ -20,7 +20,7 @@ from astropy.io import fits,ascii
 from astropy.table import Table, join, vstack
 from astropy.wcs import WCS
 from astropy import units as u
-from astropy.stats import sigma_clipped_stats
+from astropy.stats import SigmaClip, sigma_clipped_stats
 from astropy.coordinates import SkyCoord
 from astropy.nddata import Cutout2D
 
@@ -29,6 +29,7 @@ from photutils.segmentation import detect_threshold, detect_sources, deblend_sou
 from photutils.background import Background2D, MedianBackground, SExtractorBackground, MMMBackground
 from photutils.utils import calc_total_error
 from photutils.morphology import data_properties
+from photutils import make_source_mask
 
 from regions import read_ds9
 from regions import read_ds9, write_ds9, CircleSkyRegion
@@ -82,14 +83,20 @@ def performApPhoto(data,tmap,wcs,sourceCoords,radii,rin,rout,plot=True):
 		annulus_data = mask.multiply(data)
 		maskdata=mask.data
 
-		#do statistics
-		annulus_data_1d = annulus_data[maskdata > 0]
-		meansc, median_sigclip, stdsc = sigma_clipped_stats(annulus_data_1d)
-		bkg_median.append(median_sigclip)
-		bkg_mean.append(meansc)
-		bkg_std.append(stdsc)
-		appmasks.append(mask.data)
-
+		try:
+			#do statistics
+			annulus_data_1d = annulus_data[maskdata > 0]
+			meansc, median_sigclip, stdsc = sigma_clipped_stats(annulus_data_1d)
+			bkg_median.append(median_sigclip)
+			bkg_mean.append(meansc)
+			bkg_std.append(stdsc)
+			appmasks.append(mask.data)
+		except TypeError:
+			bkg_median.append(np.nanmedian(annulus_data_1d))
+			bkg_mean.append(np.nanmean(annulus_data_1d))
+			bkg_std.append(np.nanstd(annulus_data_1d))
+			appmasks.append(np.nan)
+                
 	#store values in numpy arrays
 	bkg_median = np.array(bkg_median)
 	bkg_mean = np.array(bkg_mean)
@@ -173,8 +180,8 @@ def performApPhoto(data,tmap,wcs,sourceCoords,radii,rin,rout,plot=True):
 		plt.show()
 	return phot_table
 
-def fitshapes(image,tab,plot=False):
-    columns = ['xcentroid', 'ycentroid','fwhm' ,'semimajor_sigma','semiminor_sigma', 'orientation','covar_sigx2','covar_sigy2']
+def fitshapes(image,tab,plot=False,cutouts=False,cutsize=25):
+    columns = ['xcentroid', 'ycentroid','fwhm' ,'semimajor_sigma','semiminor_sigma', 'orientation','elongation','covar_sigx2','covar_sigy2']
     
     #initialize table with correct column formatting by creating dummy table
     from photutils.datasets import make_4gaussians_image
@@ -182,6 +189,10 @@ def fitshapes(image,tab,plot=False):
     cat = data_properties(data)
     tbl = cat.to_table(columns=columns)
     tbl.remove_row(0) #remove entry from dummy table
+      
+    if cutouts:
+        cimgs=np.zeros((len(tab),cutsize,cutsize))
+        i=0
     
     #fix keywords in table if they don't match what is expected
     if 'xcentroid' not in tab.columns:
@@ -192,7 +203,7 @@ def fitshapes(image,tab,plot=False):
     for source in tab:
         #create data cutout around source centroid position
         spos=(np.int64(source['xcentroid']),np.int64(source['ycentroid']))
-        cutout=Cutout2D(image,spos,21,copy=True)
+        cutout=Cutout2D(image,spos,13,mode='partial',fill_value=0.0,copy=True)
         
         #do addtional bkg subtraciton here? - think not for now...
         mean, median, std = sigma_clipped_stats(cutout.data, sigma=3.0)
@@ -202,7 +213,20 @@ def fitshapes(image,tab,plot=False):
         cat = data_properties(c1,background=std)
         temp = cat.to_table(columns=columns)
         tbl=vstack([tbl,temp])
+        
+        if cutouts:
+            c2=Cutout2D(image,spos,cutsize,mode='partial',fill_value=0.0,copy=True)
+            
+            #shapeinfo=np.shape(c2.data)
+            #if shapeinfo==(cutsize,cutsize): #only store cutout if its correct size
+            #try:
+            #    cimgs[i,:,:]=c2.data
+            #except:
+            #    print('cutout generator failed...')
 
+            cimgs[i,:,:]=c2.data
+            i=i+1 #iterate
+            
         #optional plots for visual diagnostics
         if plot==True:
             position = (cat.xcentroid, cat.ycentroid)
@@ -233,10 +257,14 @@ def fitshapes(image,tab,plot=False):
     tab['semimajor_sigma']=tbl['semimajor_sigma']
     tab['semiminor_sigma']=tbl['semiminor_sigma']
     tab['orientation']=tbl['orientation']
+    tab['elongation']=tbl['elongation']
     tab['covar_sigx2']=tbl['covar_sigx2']
     tab['covar_sigy2']=tbl['covar_sigy2']
     
-    tab['fit_dist']=np.sqrt((tbl['xcentroid']-10.5)**2+(tbl['ycentroid']-10.5)**2)
+    tab['fit_dist']=np.sqrt((tbl['xcentroid']-6.5)**2+(tbl['ycentroid']-6.5)**2)
+    
+    if cutouts:
+        tab['cutouts']=cimgs
 
     #return input table with new columns from shape fitting
     return tab
@@ -295,13 +323,40 @@ for info in field._registry:
     #data_bkgsub = data - bkg
     
     #do background subtraciton 
-    mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-    data_bkgsub = data - median
+    #mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+    #data_bkgsub = data - median
+    
+    
+    #------------------Updated Background estimation method---------------------------
+    #create initial background model for building source mask
+    bkg_estimator = MMMBackground()  #Alternates -  SExtractorBackground() or MedianBackground()
+    bkg_data = Background2D(data,(25,25),bkg_estimator=bkg_estimator,edge_method='pad')
+    #bkg_rms=bkg_data.background_rms
+    bkg=bkg_data.background
+    
+    tmapnorm=tmap/np.max(tmap) #creating a normalized exposure time map for the mask
+    maskTPS=np.where(tmapnorm<0.05,tmapnorm,0).astype('bool')
+
+    #create masked array for the background subtracted data
+    data_ma = np.ma.masked_array(data, mask=maskTPS)
+    
+    mask_3sigma = make_source_mask(data_ma-bkg, nsigma=3, npixels=3, dilate_size=3, filter_fwhm=3)
+
+    data_ma2 = np.ma.masked_array(data, mask=mask_3sigma)
+    
+    #create updated background model detected sources masked
+    bkg_data = Background2D(data_ma2,(25,25),bkg_estimator=bkg_estimator,edge_method='pad')
+    bkg_rms=bkg_data.background_rms
+    bkg=bkg_data.background
+
+    #create background subtracted image
+    data_bkgsub = data - bkg
+    
     
     #specify radii to use with source measurements
-    radii = [4,5,6,7,8,9,10,12] #aperture radii to use in photoemtry - units are pixels
-    r_in = 12  #inner radius for background annulus - units are pixels
-    r_out = 20  #outer radius for background annulus - units are pixels
+    radii = [4,4.25,4.5,4.75,5.0,5.25,5.5,8,10,12] #aperture radii to use in photoemtry - units are pixels
+    r_in = 12  #inner radius for background annulus - units are pixels #12 or 15
+    r_out = 20  #outer radius for background annulus - units are pixels #20 or 25
     
     #Start by doing photometry on the combined source list
     #load in source lists if they exist
@@ -327,7 +382,7 @@ for info in field._registry:
     mtComb = join(combTab, CombPhotTable, keys='id')
     
     #add shape parameters to table
-    mtComb=fitshapes(data_bkgsub,mtComb) #optional plot=True for diagnostic plots
+    mtComb=fitshapes(data_bkgsub,mtComb,cutouts=True) #optional plot=True for diagnostic plots
     
     #write out catalog 
     mtComb.write(name+'_'+str(wavelength)+'um_CombCat.fits', overwrite=True)

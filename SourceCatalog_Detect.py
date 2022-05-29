@@ -21,14 +21,14 @@ from astropy.io import fits,ascii
 from astropy.wcs import WCS
 from astropy.wcs.utils import pixel_to_skycoord,skycoord_to_pixel
 from astropy import units as u
-from astropy.stats import sigma_clipped_stats
+from astropy.stats import SigmaClip,sigma_clipped_stats
 from astropy.table import join, Table, vstack
 
 from photutils.aperture import SkyCircularAperture,SkyCircularAnnulus,aperture_photometry, CircularAperture
 from photutils.segmentation import detect_threshold, detect_sources, deblend_sources, SourceCatalog
 from photutils.background import Background2D, MedianBackground, SExtractorBackground, MMMBackground
 from photutils.utils import calc_total_error
-from photutils import DAOStarFinder,IRAFStarFinder
+from photutils import DAOStarFinder,IRAFStarFinder, make_source_mask
 
 
 from regions import read_ds9, write_ds9, CircleSkyRegion
@@ -174,16 +174,44 @@ for info in field._registry:
         plt.show()
     
     #create background model for image using median method
-    bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
-    bkg_data = Background2D(data,(5, 5),bkg_estimator=bkg_estimator,edge_method='pad')
-    bkg_rms=bkg_data.background_rms
-    bkg=bkg_data.background 
+    #bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
+    #bkg_data = Background2D(data,(5, 5),bkg_estimator=bkg_estimator,edge_method='pad')
+    #bkg_rms=bkg_data.background_rms
+    #bkg=bkg_data.background 
     
     #create background subtracted image
-    data_bkgsub = data - bkg
+    #data_bkgsub = data - bkg
     
     #set detection threshold for source finding based on modeled background rms
+    #threshold = segdetsig*bkg_rms
+    
+    #------------------Updated Background estimation method---------------------------
+    #create initial background model for building source mask
+    bkg_estimator = MMMBackground()  #Alternates -  SExtractorBackground() or MedianBackground()
+    bkg_data = Background2D(data,(7,7),bkg_estimator=bkg_estimator,edge_method='pad')
+    bkg=bkg_data.background
+    
+    tmapnorm=tmap/np.max(tmap) #creating a normalized exposure time map for the mask
+    maskTPS=np.where(tmapnorm<0.05,tmapnorm,0).astype('bool')
+
+    #create masked array for the background subtracted data
+    data_ma = np.ma.masked_array(data, mask=maskTPS)
+    
+    mask_3sigma = make_source_mask(data_ma-bkg, nsigma=3, npixels=3, dilate_size=4, filter_fwhm=3)
+
+    data_ma2 = np.ma.masked_array(data, mask=mask_3sigma)
+    
+    #create updated background model detected sources masked
+    bkg_data = Background2D(data_ma2,(7,7),bkg_estimator=bkg_estimator,edge_method='pad')
+    bkg_rms=bkg_data.background_rms
+    bkg=bkg_data.background
+
+    #create background subtracted image
+    data_bkgsub = data - bkg
+
+    #set detection threshold for source finding based on modeled background rms - Note this is a 2D array
     threshold = segdetsig*bkg_rms
+        
     
     if interactive:
         #plot the data and background model
@@ -313,7 +341,7 @@ for info in field._registry:
 
 
     #Create Segmentation Map and detect sources
-    segm = detect_sources(data_bkgsub, threshold, mask=mask, npixels=5, kernel=kernel)
+    segm = detect_sources(data_bkgsub, threshold, mask=mask, npixels=8, kernel=kernel)
     
     #remove any that exist in masked region as defined in the config file
     if segm is not None:
@@ -330,7 +358,7 @@ for info in field._registry:
 
     #lets take a look at deblending sources
     if segm is not None:
-        segm_deblend = deblend_sources(data_bkgsub, segm, npixels=5,kernel=kernel, nlevels=64,contrast=0.001)
+        segm_deblend = deblend_sources(data_bkgsub, segm, npixels=11,kernel=kernel, nlevels=64,contrast=0.001)
     else:
         segm_deblend=None #if segm is empty pass it on to avoid errors
 
@@ -524,18 +552,28 @@ for info in field._registry:
             #create combined list
             mergeTab=vstack([tab1,tab2,tab3])
         elif t1 is False:
-            mergeTab=vstack([tab2,tab3])
+            if t3 is True:
+                mergeTab=vstack([tab2,tab3])
+            else: 
+                mergeTab=tab2
         elif t2 is False:
-            mergeTab=vstack([tab1,tab3])
+            if t3 is True:
+                mergeTab=vstack([tab1,tab3])
+            else:
+                mergeTab=tab1
         elif t3 is False:
             mergeTab=vstack([tab1,tab2])
         else:
-            print('Throw error! position 1')   
+            print('Throw error! position 1')  
+            
             
     elif IRAFsources is None:
         mergeTab=Table()
-        mergeTab['sky_centroid']=DAOsources['sky_centroid']
-        mergeTab['type']=200
+        if DAOsources is not None:
+            mergeTab['sky_centroid']=DAOsources['sky_centroid']
+            mergeTab['type']=200
+        else:
+            mergeTab=None
         
     elif DAOsources is None:
         mergeTab=Table()
@@ -590,9 +628,15 @@ for info in field._registry:
             #create combined table
             CombTab=vstack([tab4,tab5,tab6])
         elif t6 is False:
-            CombTab=vstack([tab4,tab5])
+            if t5 is True:
+                CombTab=vstack([tab4,tab5])
+            else:
+                CombTab=tab4
         elif t5 is False:
-            CombTab=vstack([tab4,tab6])
+            if t4 is True:
+                CombTab=vstack([tab4,tab6])
+            else:
+                CombTab=tab6
         elif t4 is False:
             CombTab=vstack([tab5,tab6])
         else:
