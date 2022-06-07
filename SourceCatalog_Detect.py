@@ -39,72 +39,10 @@ from config import dpath, dpathalt, ds9path #import additional common paramters
 
 from config import *
 
+from FORCASTphot import addSkyCentroid, makeDS9reg, CombDS9files, findNOTindex
+
 interactive=False
 
-####-------------------------functions-------------------------------------
-
-#Now add RA, DEC coordinates of sources to table
-def addSkyCentroid(tab,wcsmap):
-    if 'sky_centroid' in tab.columns:
-        print('this table already has sky centroid column!')
-    else:
-        #Now add RA, DEC coordinates of sources to table
-        if len(tab)>0:
-
-            Nsources=len(tab)
-            scs=[]
-
-            for i in range(0,Nsources):
-                xcoord=tab['xcentroid'][i]
-                ycoord=tab['ycentroid'][i]
-                sc=pixel_to_skycoord(xcoord,ycoord,wcsmap)
-                scs.append(sc)
-
-            tab['sky_centroid']=scs
-        
-    return tab
-
-# functions for creating ds9 region files
-def makeDS9reg(tab,radius,outname,color=None):
-    #get source coordinates from table
-    sourcecoords=tab['sky_centroid']
-
-    #set size of regions 
-    radius = Angle(radius, u.deg) 
-
-    #loop through and create region instances for each source
-    regions=[]
-    for i in range(0,len(sourcecoords)):
-        region = CircleSkyRegion(sourcecoords[i], radius)
-        regions.append(region)
-        
-    #write out region file
-    write_ds9(regions, outname)
-    
-    if color is not None:
-        #change the color of the regions to red - no built in way to do this in regions package :-/
-        with open(outname, 'r+') as f:
-            text = f.read()
-            text = re.sub(r'\)', r') # color='+str(color), text)
-            f.seek(0)
-            f.write(text)
-            f.truncate()
-    return text
-
-#create ds9 file by combining two region files
-def makeCombDS9file(text1,text2,outname):
-    newregtext=text1+text2[45:]
-
-    with open(outname, 'w+') as f:
-        f.seek(0)
-        f.write(newregtext)
-        f.truncate()
-        
-#function to find the 'not' indcies for sources in table
-def findNOTindex(tab,index):
-    allpos=np.linspace(0,len(tab)-1,len(tab),dtype=np.int64) 
-    notindex=list(set(allpos)-set(index))
-    return notindex
 
 ####----------------------- start of code-----------------------------------------
 for info in field._registry:
@@ -172,18 +110,6 @@ for info in field._registry:
         fig.colorbar(im3, cax=cax, orientation='vertical')
         ax3.set_axis_off()
         plt.show()
-    
-    #create background model for image using median method
-    #bkg_estimator = MedianBackground() #MMMBackground() #SExtractorBackground() #MedianBackground()
-    #bkg_data = Background2D(data,(5, 5),bkg_estimator=bkg_estimator,edge_method='pad')
-    #bkg_rms=bkg_data.background_rms
-    #bkg=bkg_data.background 
-    
-    #create background subtracted image
-    #data_bkgsub = data - bkg
-    
-    #set detection threshold for source finding based on modeled background rms
-    #threshold = segdetsig*bkg_rms
     
     #------------------Updated Background estimation method---------------------------
     #create initial background model for building source mask
@@ -258,10 +184,10 @@ for info in field._registry:
     mean, median, std = sigma_clipped_stats(data_bkgsub_ma, sigma=3.0)      
         
     #now run starfinder routines to find sources 
-    daofind = DAOStarFinder(fwhm=5, threshold=5.0*std)
+    daofind = DAOStarFinder(fwhm=5, threshold=finddetsig*std)
     DAOsources = daofind(data_bkgsub_ma,mask=maskPS)
 
-    StarFinder = IRAFStarFinder(fwhm=5, threshold=5.0*std)
+    StarFinder = IRAFStarFinder(fwhm=5, threshold=finddetsig*std)
     IRAFsources = StarFinder(data_bkgsub_ma,mask=maskPS)    
         
     if interactive:
@@ -304,7 +230,8 @@ for info in field._registry:
         #nDAOsources.write(name+'_'+str(wavelength)+'um_dao.fits',overwrite=True)
 
         #save a ds9 regions file for the sources
-        txt2=makeDS9reg(DAOsources,0.00083333,name+'_daoFind.reg','magenta') #r=3"
+        radius = Angle(0.00083333, u.deg) #must be in degrees - current value is r=3"
+        txt2=makeDS9reg(name+'_daoFind.reg',DAOsources,radius,color='magenta')
     else:
         print('Number of DAOfind Sources found: 0')
         txt2=[]
@@ -321,10 +248,11 @@ for info in field._registry:
         #nDAOsources.write(name+'_'+str(wavelength)+'um_iraf.fits',overwrite=True)
 
         #save a ds9 regions file for the sources
-        txt3=makeDS9reg(IRAFsources,0.00083333,name+'_irafFind.reg','cyan') #r=3"
+        radius = Angle(0.00083333, u.deg) #must be in degrees - current value is r=3"
+        txt3=makeDS9reg(name+'_irafFind.reg',IRAFsources,radius,color='cyan')
     else:
         print('Number of IRAFfind Sources found: 0')
-        txt2=[]
+        txt3=[]
         
         
     ###------------------------- SEG MAP ----------------------------------    
@@ -390,7 +318,8 @@ for info in field._registry:
         #SEGsources.write(name+'_'+str(wavelength)+'um_seg.fits',overwrite=True)
 
         #save a ds9 regions file for the sources
-        txt1=makeDS9reg(SEGsources,0.00083333,name+'_segFind.reg','red') #r=3"
+        radius = Angle(0.00083333, u.deg) #r=3"
+        txt1=makeDS9reg(name+'_segFind.reg',SEGsources,radius,color='red')
     else:
         SEGsources=None
         txt1=[]
@@ -442,6 +371,8 @@ for info in field._registry:
     UserFile=name+'_ds9.reg'
     if os.path.isfile(name+'_ds9.reg'):
         sourcesDS9=read_ds9(name+'_ds9.reg')
+        
+        #print('\n Found User DS9 file \n')
 
         clist=[]
 
@@ -523,7 +454,7 @@ for info in field._registry:
         if len(rdx)>0:
             tab1=Table()
             tab1['sky_centroid']=sourcesDao[rdx]
-            tab1['type']=100 #crossmatch IRAF & DAO
+            tab1['finder']=100 #crossmatch IRAF & DAO
             t1=True
         else:
             t1=False
@@ -533,7 +464,7 @@ for info in field._registry:
         if len(notrdx)>0:
             tab2=Table()
             tab2['sky_centroid']=sourcesDao[notrdx]
-            tab2['type']=200 #DAO
+            tab2['finder']=200 #DAO
             t2=True
         else:
             t2=False
@@ -543,7 +474,7 @@ for info in field._registry:
         if len(notidx)>0:
             tab3=Table()
             tab3['sky_centroid']=sourcesIRAF[notidx]
-            tab3['type']=300 #IRAF
+            tab3['finder']=300 #IRAF
             t3=True
         else:
             t3=False
@@ -571,14 +502,14 @@ for info in field._registry:
         mergeTab=Table()
         if DAOsources is not None:
             mergeTab['sky_centroid']=DAOsources['sky_centroid']
-            mergeTab['type']=200
+            mergeTab['finder']=200
         else:
             mergeTab=None
         
     elif DAOsources is None:
         mergeTab=Table()
         mergeTab['sky_centroid']=IRAFsources['sky_centroid']
-        mergeTab['type']=300
+        mergeTab['finder']=300
         
     else:
         print('Danger, unexpected behavior...')
@@ -599,7 +530,7 @@ for info in field._registry:
         if len(rdx)>0:
             tab4=Table()
             tab4['sky_centroid']=mergeTab['sky_centroid'][rdx]
-            tab4['type']=mergeTab['type'][rdx]+10
+            tab4['finder']=mergeTab['finder'][rdx]+10
             t4=True
         else:
             t4=False
@@ -609,7 +540,7 @@ for info in field._registry:
         if len(notrdx)>0:
             tab5=Table()
             tab5['sky_centroid']=mergeTab['sky_centroid'][notrdx]
-            tab5['type']=mergeTab['type'][notrdx]+20
+            tab5['finder']=mergeTab['finder'][notrdx]+20
             t5=True
         else:
             t5=False
@@ -619,7 +550,7 @@ for info in field._registry:
         if len(notidx)>0:
             tab6=Table()
             tab6['sky_centroid']=sourcesSeg[notidx]
-            tab6['type']=10
+            tab6['finder']=10
             t6=True
         else:
             t6=False
@@ -649,7 +580,7 @@ for info in field._registry:
     elif Findsources is None:
         CombTab=Table()
         CombTab['sky_centroid']=SEGsources['sky_centroid']
-        CombTab['type']=10
+        CombTab['finder']=10
         
     else:
         print('Danger, unexpected behavior...')
@@ -665,7 +596,7 @@ for info in field._registry:
         if len(rdx)>0:
             tab7=Table()
             tab7['sky_centroid']=CombTab['sky_centroid'][rdx]
-            tab7['type']=CombTab['type'][rdx]+1
+            tab7['finder']=CombTab['finder'][rdx]+1
             t7=True
         else:
             t7=False
@@ -674,7 +605,7 @@ for info in field._registry:
         if len(notrdx)>0:
             tab8=Table()
             tab8['sky_centroid']=CombTab['sky_centroid'][notrdx]
-            tab8['type']=CombTab['type'][notrdx]+0 #not a user source
+            tab8['finder']=CombTab['finder'][notrdx]+0 #not a user source
             t8=True
         else:
             t8=False
@@ -684,11 +615,10 @@ for info in field._registry:
         if len(notidx)>0:
             tab9=Table()
             tab9['sky_centroid']=ds9sc[notidx]
-            tab8['type']=1
+            tab8['finder']=1
             t9=True
         else:
             t9=False
-
 
 
         if t7&t8&t9:
@@ -708,7 +638,7 @@ for info in field._registry:
         print('No user Sources Defined')
 
 
-    if CombTab is not None:
+    if CombTabNew is not None:
         #add id column to table before saving
         CombTabNew['id']= np.arange(1, len(CombTabNew) + 1)
     
