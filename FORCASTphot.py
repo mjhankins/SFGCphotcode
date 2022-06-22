@@ -161,6 +161,7 @@ def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=Tr
         handles = (ap_patches[0], ann_patches[0])
         plt.legend(loc='best', facecolor='#458989', labelcolor='white',
                    handles=handles, prop={'weight': 'bold', 'size': 11})
+    #plt.savefig("detectimg.png",dpi=600)    
     plt.show()
 
     return phot_table
