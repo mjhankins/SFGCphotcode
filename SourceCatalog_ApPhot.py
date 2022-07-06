@@ -38,7 +38,7 @@ from config import dpath, dpathalt, ds9path #import additional common paramters
 
 from config import *
 
-from FORCASTphot import performApPhoto, fitshapes
+from FORCASTphot import performApPhoto, fitshapes, modelSources
 
 
 #Specify options for script
@@ -148,6 +148,9 @@ for info in field._registry:
     
     #add shape parameters to table
     mtComb=fitshapes(data_bkgsub,mtComb,cutouts=True,cutsize=cutsize) #optional plot=True for diagnostic plots
+    
+    #new model sources script
+    mtComb=modelSources(data_bkgsub,errormap,mtComb,header)
     
     #write out catalog 
     mtComb.write(name+'_'+str(wavelength)+'um_CombCat.fits', overwrite=True)
