@@ -33,7 +33,6 @@ from regions import read_ds9
 from regions import read_ds9, write_ds9, CircleSkyRegion
 
 #import configuration for selected file
-from config import wavelength, bkgbox, cutsize, radii, r_in, r_out #import additional common paramters
 from config import dpath, dpathalt, ds9path #import additional common paramters
 
 from config import *
@@ -45,14 +44,53 @@ from FORCASTphot import performApPhoto, fitshapes, modelSources
 
 interactive=False
 
+#command line options
+if len(sys.argv)==1:
+    print('Error. Please specify wavelength as argument (e.g., \'python SourceCatalog_Detect.py 25\')')
+    print('Exiting...')
+    sys.exit(1)
+elif len(sys.argv)==2:
+    if sys.argv[1]=='25':
+        from config import F252 as filt
+    elif sys.argv[1]=='37':
+        from config import F371 as filt
+    else:
+        print('Error. unrecognized filter option. Please select 25 or 37')
+        sys.exit(1)
+elif len(sys.argv)==3:
+    if sys.argv[1]=='25':
+        from config import F252 as filt
+    elif sys.argv[1]=='37':
+        from config import F371 as filt
+    else:
+        print('Error. unrecognized filter option. Please select 25 or 37')
+        sys.exit(1)
+        
+    if sys.argv[2]=='interactive':
+        interactive=True
+else:
+    print('error - too many options given. only provide wavelength (e.g., \'python SourceCatalog_Detect.py 25\')')
+    sys.exit(1)
+
+#rename a few parameters that were just imported. 
+bkgbox=filt.bkgbox
+radii=filt.radii
+r_in=filt.r_in
+r_out=filt.r_out
+cutsize=filt.cutsize
+wavelength=filt.wavelength
+
 
 ####------------------------Start of main-------------------------------------
 for info in field._registry:
-    filename=info.filename
     name=info.name
     m1cut=info.m1cut
     m2lims=info.m2lims
-    m3lims=info.m3lims
+    
+    if wavelength==25:
+        filename=info.file25
+    elif wavelength==37:
+        filename=info.file37
     
     print('\nScript running on field: ', name)
     
@@ -146,11 +184,12 @@ for info in field._registry:
     #merge Tables
     mtComb = join(combTab, CombPhotTable, keys='id')
     
-    #add shape parameters to table
-    mtComb=fitshapes(data_bkgsub,mtComb,cutouts=True,cutsize=cutsize) #optional plot=True for diagnostic plots
+    #add shape parameters to table - remove because this is depreciated
+    mtComb=fitshapes(data_bkgsub,mtComb) #optional plot=True for diagnostic plots
     
     #new model sources script
-    mtComb=modelSources(data_bkgsub,errormap,mtComb,header)
+    mtComb=modelSources(data_bkgsub,errormap,mtComb,header,cutouts=True,cutsize=cutsize)
+    
     
     #write out catalog 
     mtComb.write(name+'_'+str(wavelength)+'um_CombCat.fits', overwrite=True)
