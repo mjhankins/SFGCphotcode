@@ -31,7 +31,484 @@ from regions import read_ds9, write_ds9, CircleSkyRegion
 
 from config import *
 
+# ----------------- newest stuff --------------------
+from astropy.modeling import models, fitting
+import warnings
+from astropy.utils.exceptions import AstropyUserWarning
 
+
+
+
+def extractModel(psfmodel, datacutout, unccutout,correctErrors=True):
+	#Normalize psfmodel
+	psfmodel = psfmodel / np.sum(psfmodel)
+	
+	#Compute best-fit flux for model
+	model_flux = np.sum(psfmodel * datacutout) / np.sum(np.square(psfmodel))
+	
+	#Compute chi2 of model fit
+	deg_freedom = np.size(datacutout) - 1 
+	chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(unccutout)) / deg_freedom #*100
+	
+	
+	if (correctErrors and chi2<2.0):
+		re_unccutout=unccutout*np.sqrt(chi2)
+		model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(re_unccutout)))/ np.sum(np.square(psfmodel))
+		#chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(re_unccutout)) / deg_freedom    
+	else:
+		model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(unccutout)))/ np.sum(np.square(psfmodel))
+	    
+	return model_flux, model_flux_err, chi2
+
+
+
+
+def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
+    csize=17
+    xfit=[]
+    yfit=[]
+    xfiterr=[]
+    yfiterr=[]
+    amp=[]
+    alpha=[]
+    alphaerr=[]
+    gamma=[]
+    gammaerr=[]
+    fwhm=[]
+    xfwhm=[]
+    yfwhm=[]
+    elong=[]
+    orient=[]
+    modelflux=[]
+    modelfluxerr=[]
+    modelSNRs=[]
+    modelchi2=[]
+    fitwarn=[]
+    gmodelflux=[]
+    gmodelfluxerr=[]
+    gmodelSNRs=[]
+    gmodelchi2=[]
+    gfitwarn=[]
+    modeltype=[]
+    #sourcepixels=[]
+    cimages=np.zeros((len(tab),csize,csize))
+    residuals=np.zeros((len(tab),csize,csize))
+    cutimgs=np.zeros((len(tab),cutsize,cutsize)) #these are the display cutouts
+    pcovmatrix=[]
+    
+    
+    i=0
+    for source in tab:
+        
+        try:
+            spos=(source['xcentroid'].value,source['ycentroid'].value)
+        except:
+            print('centroids are missing from table. Using x/y center instead, which is not as accurate')
+            spos=(source['xcenter'].value,source['ycenter'].value)
+        
+        cut_img=Cutout2D(data,spos,csize,mode='partial',fill_value=0.0,copy=True)
+        unc_img=Cutout2D(errorimg,spos,csize,mode='partial',fill_value=0.0,copy=True)
+        
+        cimg=cut_img.data
+        uimg=unc_img.data
+        
+        #Background subtraction based on annulus background
+        cimg=cimg-tab['ann_bkg_med'][i] #could do this better with a 2D bkg model... but larger cutout needed.
+        
+        y, x = np.mgrid[:csize, :csize]
+        
+        # Fit the data using astropy.modeling
+        p1_init = models.Moffat2D(x_0=np.int32(csize/2),y_0=np.int32(csize/2))
+        fit_p1 = fitting.LevMarLSQFitter(calc_uncertainties=True)
+        
+        
+        with warnings.catch_warnings(record=True) as w:      
+            
+            p1 = fit_p1(p1_init, x, y, cimg)
+            #print(w[0].message) #debugging to check error messages
+            fitwarn.append(len(w))
+            
+
+        if p1.cov_matrix is not None:
+            p1cov=np.diag(p1.cov_matrix.cov_matrix)
+            xfiterr.append(p1cov[1])
+            yfiterr.append(p1cov[2])
+            gammaerr.append(p1cov[3])
+            alphaerr.append(p1cov[4])
+            #pcovmatrix.append(p1cov)
+            #print(p1cov)
+        else:
+            xfiterr.append(-1)
+            yfiterr.append(-1)
+            gammaerr.append(-1)
+            alphaerr.append(-1)
+            #pcovmatrix.append([-1, -1, -1, -1, -1)
+        
+        mmodel=p1(x, y)
+        resid=cimg.data - mmodel
+        
+        mflux,mfluxerr,chi2m=extractModel(mmodel,cimg,uimg)
+        
+        
+        r_effective=(p1.fwhm)/2.0
+        noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/mflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(mfluxerr/mflux)**2)
+        modelSNR=mflux/noisecalc
+        
+        
+        p2_init = models.Gaussian2D(x_mean=np.int32(csize/2),y_mean=np.int32(csize/2))
+        fit_p2 = fitting.LevMarLSQFitter(calc_uncertainties=True)
+        
+        with warnings.catch_warnings(record=True) as w2:
+            p2 = fit_p2(p2_init, x, y, cimg)
+            
+            gfitwarn.append(len(w2))
+        
+        gmodel=p2(x, y)
+        gresid=cimg - gmodel
+        
+        gflux,gfluxerr,chi2g=extractModel(gmodel,cimg,uimg)
+        
+        
+        r_effective=np.sqrt(p2.x_fwhm*p2.y_fwhm)/2.0
+        noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/gflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(gfluxerr/gflux)**2)
+        gmodelSNR=gflux/noisecalc
+        
+        if cutouts:
+            c2=Cutout2D(data,spos,cutsize,mode='partial',fill_value=0.0,copy=True)
+            cutimgs[i,:,:]=c2.data
+            
+                
+        #pix_aperture=CircularAperture((p1.x_0.value,p1.y_0.value), r=r_effective*1.2)
+        #source_mask = pix_aperture.to_mask(method='exact')
+        #source_data = source_mask.multiply(data)
+        #sourcedata=source_mask.data
+        #ourcepix=sum(sum(sourcedata>5*tab['ann_bkg_std'][i]))
+ 
+
+        xfit.append(p1.x_0.value)
+        yfit.append(p1.y_0.value)
+        amp.append(p1.amplitude.value)
+        alpha.append(p1.alpha.value)
+        gamma.append(p1.gamma.value)
+        fwhm.append(p1.fwhm*0.768) # in arcseconds
+        xfwhm.append(p2.x_fwhm*0.768) # in arcseconds
+        yfwhm.append(p2.y_fwhm*0.768) # in arcseconds
+        
+        if p2.x_fwhm<p2.y_fwhm:
+            elong.append(p2.x_fwhm/p2.y_fwhm)
+        else:
+            elong.append(p2.y_fwhm/p2.x_fwhm)
+        
+        orient.append(p2.theta.value)
+        modelflux.append(mflux)
+        modelfluxerr.append(mfluxerr)
+        modelSNRs.append(modelSNR)
+        modelchi2.append(chi2m)
+        
+        gmodelflux.append(gflux)
+        gmodelfluxerr.append(gfluxerr)
+        gmodelSNRs.append(gmodelSNR)
+        gmodelchi2.append(chi2g)
+        #sourcepixels.append(sourcepix)
+        i=i+1
+         
+
+    #elongation
+    tab['fit_x0']=xfit
+    tab['fit_y0']=yfit
+    tab['fit_x0_err']=xfiterr
+    tab['fit_y0_err']=yfiterr
+    tab['fit_amp']=amp
+    tab['fit_gamma']=gamma
+    tab['fit_gamma_err']=gammaerr
+    tab['fit_alpha']=alpha
+    tab['fit_alpha_err']=alphaerr
+    tab['fit_fwhm']=fwhm
+    tab['fit_xfwhm']=xfwhm
+    tab['fit_yfwhm']=yfwhm
+    tab['fit_elong']=elong
+    tab['fit_orient']=orient
+    tab['FluxMoffat2D']=modelflux
+    tab['FluxMoffatErr']=modelfluxerr
+    tab['ModelSNR']=modelSNRs
+    tab['Moffat2DChi2']=modelchi2
+    tab['FluxGauss2D']=gmodelflux
+    tab['FluxGauss2DErr']=gmodelfluxerr
+    tab['gModelSNR']=gmodelSNRs
+    tab['Gauss2DChi2']=gmodelchi2
+    tab['FitWarningFlag']=fitwarn
+    #tab['SourcePix']=sourcepixels
+    #tab['DataCutout']=cimages
+    #tab['ModelResidual']=residuals
+    tab['cutouts']=cutimgs
+    #tab['Model_pcov']=pcovmatrix
+    
+    tab['fit_dist']=np.sqrt((xfit-np.int32(csize/2))**2+(yfit-np.int32(csize/2))**2)
+    
+    scstats=sigma_clipped_stats(modelchi2)
+    rescl=scstats[1]
+    if rescl<0.5:
+        tab['MoffatChi2RE']=np.array(modelchi2)/rescl
+        tab['GaussChi2RE']=np.array(gmodelchi2)/rescl
+    else:
+        tab['MoffatChi2RE']=np.array(modelchi2)
+        tab['GaussChi2RE']=np.array(gmodelchi2)
+    
+    #scstats=sigma_clipped_stats(gmodelchi2)
+    #rescl=scstats[1]+3*scstats[2]
+    #if rescl<0.7:
+    #    tab['GaussChi2RE']=np.array(gmodelchi2)/rescl
+    #else:
+    #    tab['GaussChi2RE']=np.array(gmodelchi2)
+    
+    #classify models
+    for source in tab:
+        if source['MoffatChi2RE']<=2.0:
+            mtype='M'
+            #residuals[i,:,:]=resid
+        elif source['GaussChi2RE']<=2.0:
+            mtype='G'
+            #residuals[i,:,:]=gresid
+        else:
+            mtype='A' 
+                
+        modeltype.append(mtype)
+        
+    tab['BestModel']=modeltype
+    
+    return tab
+
+
+
+
+
+'''
+def extractModel(psfmodel, datacutout, unccutout):
+	#Normalize psfmodel
+	psfmodel = psfmodel / np.sum(psfmodel)
+	
+	#Compute best-fit flux for model
+	model_flux = np.sum(psfmodel * datacutout) / np.sum(np.square(psfmodel))
+	#Compute error for flux model
+	model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(unccutout)))/ np.sum(np.square(psfmodel))/10. #fudge factor...
+	
+	#Compute chi2 of model fit
+	deg_freedom = np.size(datacutout) - 1 
+	chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(unccutout)) / deg_freedom
+	
+	return model_flux, model_flux_err, chi2
+
+
+
+def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
+    csize=17
+    xfit=[]
+    yfit=[]
+    xfiterr=[]
+    yfiterr=[]
+    amp=[]
+    alpha=[]
+    alphaerr=[]
+    gamma=[]
+    gammaerr=[]
+    fwhm=[]
+    xfwhm=[]
+    yfwhm=[]
+    elong=[]
+    orient=[]
+    modelflux=[]
+    modelfluxerr=[]
+    modelSNRs=[]
+    modelchi2=[]
+    fitwarn=[]
+    gmodelflux=[]
+    gmodelfluxerr=[]
+    gmodelSNRs=[]
+    gmodelchi2=[]
+    gfitwarn=[]
+    modeltype=[]
+    sourcepixels=[]
+    cimages=np.zeros((len(tab),csize,csize))
+    residuals=np.zeros((len(tab),csize,csize))
+    cutimgs=np.zeros((len(tab),cutsize,cutsize)) #these are the display cutouts
+    #pcovmatrix=[]
+    
+    
+    i=0
+    for source in tab:
+        spos=(source['xcentroid'].value,source['ycentroid'].value)
+        
+        cut_img=Cutout2D(data,spos,csize,mode='partial',fill_value=0.0,copy=True)
+        unc_img=Cutout2D(errorimg,spos,csize,mode='partial',fill_value=0.0,copy=True)
+        
+        cimg=cut_img.data
+        uimg=unc_img.data
+        
+        #Background subtraction based on annulus background
+        cimg=cimg-tab['ann_bkg_med'][i] #could do this better with a 2D bkg model... but larger cutout needed.
+        
+        y, x = np.mgrid[:csize, :csize]
+        
+        # Fit the data using astropy.modeling
+        p1_init = models.Moffat2D(x_0=np.int32(csize/2),y_0=np.int32(csize/2))
+        fit_p1 = fitting.LevMarLSQFitter(calc_uncertainties=True)
+        
+        
+        with warnings.catch_warnings(record=True) as w:      
+            
+            p1 = fit_p1(p1_init, x, y, cimg)
+            #print(w[0].message) #debugging to check error messages
+            fitwarn.append(len(w))
+        
+        if p1.cov_matrix is not None:
+            p1cov=np.diag(p1.cov_matrix.cov_matrix)
+            xfiterr.append(p1cov[1])
+            yfiterr.append(p1cov[2])
+            gammaerr.append(p1cov[3])
+            alphaerr.append(p1cov[4])
+            #pcovmatrix.append(p1cov)
+        else:
+            xfiterr.append(-1)
+            yfiterr.append(-1)
+            gammaerr.append(-1)
+            alphaerr.append(-1)
+            #pcovmatrix.append([-1, -1, -1, -1, -1])
+        
+        mmodel=p1(x, y)
+        resid=cimg.data - mmodel
+        
+        mflux,mfluxerr,chi2m=extractModel(mmodel,cimg,uimg)
+        
+        r_effective=(p1.fwhm)/2.0
+        noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/mflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(mfluxerr/mflux)**2)
+        modelSNR=1.0*mflux/noisecalc
+        
+        
+        
+        p2_init = models.Gaussian2D(x_mean=np.int32(csize/2),y_mean=np.int32(csize/2))
+        fit_p2 = fitting.LevMarLSQFitter(calc_uncertainties=True)
+        
+        with warnings.catch_warnings(record=True) as w2:
+            p2 = fit_p2(p2_init, x, y, cimg)
+            
+            gfitwarn.append(len(w2))
+        
+        gmodel=p2(x, y)
+        gresid=cimg - gmodel
+        
+        gflux,gfluxerr,chi2g=extractModel(gmodel,cimg,uimg)
+        
+        r_effective=np.sqrt(p2.x_fwhm*p2.y_fwhm)/2.0
+        noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/gflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(gfluxerr/gflux)**2)
+        gmodelSNR=1.0*gflux/noisecalc
+        
+        if cutouts:
+            c2=Cutout2D(data,spos,cutsize,mode='partial',fill_value=0.0,copy=True)
+            cutimgs[i,:,:]=c2
+            
+        try:    
+            pix_aperture=CircularAperture((p1.x_0.value,p1.y_0.value), r=r_effective*1.2)
+        except:
+            pix_aperture=CircularAperture((17/.2,17.2), r=r_effective*1.2)
+            
+        source_mask = pix_aperture.to_mask(method='exact')
+        source_data = source_mask.multiply(data)
+        sourcedata=source_mask.data
+        sourcepix=sum(sum(sourcedata>5*tab['ann_bkg_std'][i]))
+        
+
+        xfit.append(p1.x_0.value)
+        yfit.append(p1.y_0.value)
+        amp.append(p1.amplitude.value)
+        alpha.append(p1.alpha.value)
+        gamma.append(p1.gamma.value)
+        fwhm.append(p1.fwhm*0.768) # in arcseconds
+        xfwhm.append(p2.x_fwhm*0.768) # in arcseconds
+        yfwhm.append(p2.y_fwhm*0.768) # in arcseconds
+        
+        if p2.x_fwhm<p2.y_fwhm:
+            elong.append(p2.x_fwhm/p2.y_fwhm)
+        else:
+            elong.append(p2.y_fwhm/p2.x_fwhm)
+        
+        orient.append(p2.theta.value)
+        modelflux.append(mflux)
+        modelfluxerr.append(mfluxerr)
+        modelSNRs.append(modelSNR)
+        modelchi2.append(chi2m)
+        
+        gmodelflux.append(gflux)
+        gmodelfluxerr.append(gfluxerr)
+        gmodelSNRs.append(gmodelSNR)
+        gmodelchi2.append(chi2g)
+        sourcepixels.append(sourcepix)
+        
+        
+        if chi2m<=2.3:
+            mtype='M'
+            residuals[i,:,:]=resid
+        elif chi2g<=2.3:
+            mtype='G'
+            residuals[i,:,:]=gresid
+        else:
+            mtype='A'     
+        
+        #cimages[i,:,:]=cimg
+        #if chi2m/chi2g < 1.05:
+        #    if chi2m<=2.3:
+        #        mtype = 'M'
+        #        residuals[i,:,:]=resid
+        #    else:
+        #        mtype= 'A'
+        #else:
+        #    if chi2g<=2.3:
+        #        mtype = 'G'
+        #        residuals[i,:,:]=gresid
+        #    else:
+        #        mtype = 'A'
+                
+        modeltype.append(mtype)
+        i=i+1
+        
+        
+    
+    #elongation
+    tab['fit_x0']=xfit
+    tab['fit_y0']=yfit
+    tab['fit_x0_err']=xfiterr
+    tab['fit_y0_err']=yfiterr
+    tab['fit_amp']=amp
+    tab['fit_gamma']=gamma
+    tab['fit_gamma_err']=gammaerr
+    tab['fit_alpha']=alpha
+    tab['fit_alpha_err']=alphaerr
+    tab['fit_fwhm']=fwhm
+    tab['fit_xfwhm']=xfwhm
+    tab['fit_yfwhm']=yfwhm
+    tab['fit_elong']=elong
+    tab['fit_orient']=orient
+    tab['FluxMoffat2D']=modelflux
+    tab['FluxMoffatErr']=modelfluxerr
+    tab['ModelSNR']=modelSNRs
+    tab['Moffat2DChi2']=modelchi2
+    tab['FluxGauss2D']=gmodelflux
+    tab['FluxGauss2DErr']=gmodelfluxerr
+    tab['gModelSNR']=gmodelSNRs
+    tab['Gauss2DChi2']=gmodelchi2
+    tab['FitWarningFlag']=fitwarn
+    tab['BestModel']=modeltype
+    tab['SourcePix']=sourcepixels
+    #tab['DataCutout']=cimages
+    tab['ModelResidual']=residuals
+    tab['cutouts']=cutimgs
+    #tab['Model_pcov']=pcovmatrix
+    
+    return tab
+
+
+'''
+
+# ----------------- newest stuff --------------------
 
 def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=True):
     
@@ -550,8 +1027,8 @@ def makeDS9reg(savename, table, radius, color='green',label=None):
         
         
 
-def CombDS9files(text1,text2,text3,outname):
-    newregtext=text1+text2[45:]+text3[45:]
+def CombDS9files(text1,text2,outname):
+    newregtext=text1+text2[45:]
 
     with open(outname, 'w+') as f:
         f.seek(0)
