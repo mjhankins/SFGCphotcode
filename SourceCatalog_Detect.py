@@ -525,39 +525,46 @@ for info in field._registry:
         if len(rdx)>0:
             tab4=Table()
             tab4['sky_centroid']=ds9sc[rdx] #take user defined position instead... #CombTab['sky_centroid'][rdx]
-            tab4['finder']=CombTab['finder'][idx]-3
+            tab4['finder']=CombTab['finder'][rdx]-3
             t4=True
         else:
             t4=False
 
-        notrdx=findNOTindex(mergeList,rdx)
-        if len(notrdx)>0:
+        notidx=findNOTindex(mergeList,idx)
+        if len(notidx)>0:
             tab5=Table()
-            tab5['sky_centroid']=CombTab['sky_centroid'][notrdx]
-            tab5['finder']=CombTab['finder'][notrdx]+0 #not a user source
+            tab5['sky_centroid']=CombTab['sky_centroid'][notidx]
+            tab5['finder']=CombTab['finder'][notidx]+0 #not a user source
             t5=True
         else:
             t5=False
 
 
-        notidx=findNOTindex(ds9sc,idx)
-        if len(notidx)>0:
+        notrdx=findNOTindex(ds9sc,rdx)
+        if len(notrdx)>0:
             tab6=Table()
-            tab6['sky_centroid']=ds9sc[notidx] #only user source
+            tab6['sky_centroid']=ds9sc[notrdx] #only user source
             tab6['finder']=1
             t6=True
         else:
             t6=False
 
 
-
         if t4&t5&t6:
             #create combined table
             mergeTab=vstack([tab4,tab5,tab6])
         elif t6 is False:
-            mergeTab=vstack([tab4,tab5])
+            if t4&t5:
+                mergeTab=vstack([tab4,tab5])
+            elif t4 is False:
+                mergeTab=tab5
+            else:
+                mergeTab=tab4
         elif t5 is False:
-            mergeTab=vstack([tab4,tab6])
+            if t4:
+                mergeTab=vstack([tab4,tab6])
+            else:
+                mergeTab=tab6
         elif t4 is False:
             mergeTab=vstack([tab5,tab6])
         else:

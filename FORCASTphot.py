@@ -769,8 +769,15 @@ def CombineFieldResults(CatName,wavelength): # #Name options- 'CombCat', 'SegCat
         
     #loop through all the saved photometry tables for individual fields and append them together
     for info in field._registry:
-        filename=info.filename
         name=info.name
+        
+        if wavelength==25:
+            filename=info.file25
+        elif wavelength==37:
+            filename=info.file37
+        else:
+            print('Error! Wavlength must be 25 or 37...')
+            sys.exit(1)
 
         #print('\nLoading in photometry data from field: ', name)
 
