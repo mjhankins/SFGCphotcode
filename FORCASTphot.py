@@ -51,10 +51,10 @@ def extractModel(psfmodel, datacutout, unccutout,correctErrors=True):
 	chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(unccutout)) / deg_freedom #*100
 	
 	
-	if (correctErrors and chi2<2.0):
+	if (correctErrors and chi2<0.7):
 		re_unccutout=unccutout*np.sqrt(chi2)
 		model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(re_unccutout)))/ np.sum(np.square(psfmodel))
-		#chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(re_unccutout)) / deg_freedom    
+		#chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(re_unccutout)) / deg_freedom    #don't update values
 	else:
 		model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(unccutout)))/ np.sum(np.square(psfmodel))
 	    
@@ -103,7 +103,7 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
         try:
             spos=(source['xcentroid'].value,source['ycentroid'].value)
         except:
-            print('centroids are missing from table. Using x/y center instead, which is not as accurate')
+            print('centroids are missing from table. Using x/y center instead')
             spos=(source['xcenter'].value,source['ycenter'].value)
         
         cut_img=Cutout2D(data,spos,csize,mode='partial',fill_value=0.0,copy=True)
@@ -150,7 +150,7 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
         mflux,mfluxerr,chi2m=extractModel(mmodel,cimg,uimg)
         
         
-        r_effective=(p1.fwhm)/2.0
+        r_effective=(p1.fwhm)/2.355*1.5 #use 1.5 sigma? could be adjusted...
         noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/mflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(mfluxerr/mflux)**2)
         modelSNR=mflux/noisecalc
         
@@ -169,7 +169,7 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
         gflux,gfluxerr,chi2g=extractModel(gmodel,cimg,uimg)
         
         
-        r_effective=np.sqrt(p2.x_fwhm*p2.y_fwhm)/2.0
+        r_effective=np.sqrt(p2.x_fwhm*p2.y_fwhm)/2.355*1.5 #use 1.5 sigma? could be adjusted...
         noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/gflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(gfluxerr/gflux)**2)
         gmodelSNR=gflux/noisecalc
         
@@ -194,7 +194,7 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
         xfwhm.append(p2.x_fwhm*0.768) # in arcseconds
         yfwhm.append(p2.y_fwhm*0.768) # in arcseconds
         
-        if p2.x_fwhm<p2.y_fwhm:
+        if p2.x_fwhm>p2.y_fwhm:
             elong.append(p2.x_fwhm/p2.y_fwhm)
         else:
             elong.append(p2.y_fwhm/p2.x_fwhm)
@@ -1043,4 +1043,10 @@ def CombDS9files(text1,text2,outname):
         f.truncate()
 
 
+    
+    
+    
+    
+        
+        
 
