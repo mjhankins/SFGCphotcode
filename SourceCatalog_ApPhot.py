@@ -44,6 +44,8 @@ from FORCASTphot import performApPhoto, fitshapes, modelSources
 
 interactive=False
 
+padmaps=True
+
 #command line options
 if len(sys.argv)==1:
     print('Error. Please specify wavelength as argument (e.g., \'python SourceCatalog_Detect.py 25\')')
@@ -151,11 +153,14 @@ for info in field._registry:
     #create background subtracted image
     data_bkgsub = data - bkg
     
-    
-    #specify radii to use with source measurements
-    #radii = [4, 4.25, 4.5, 4.75, 5.0, 5.25, 5.5, 8, 10, 10.5, 12] #aperture radii to use in photoemtry - units are pixels
-    #r_in = 12  #inner radius for background annulus - units are pixels #12 or 15
-    #r_out = 20  #outer radius for background annulus - units are pixels #20 or 25
+    #optional pad arrays - helps with edge sources but requires some care...
+    if padmaps:
+        ma=np.isnan(data_bkgsub)
+        bkgsubstats=sigma_clipped_stats(data_bkgsub)
+        data_bkgsub[ma]=bkgsubstats[1]
+
+        ma=np.isnan(errormap)
+        errormap[ma]=np.nanmax(errormap)
     
     #Start by doing photometry on the combined source list
     #load in source lists if they exist
