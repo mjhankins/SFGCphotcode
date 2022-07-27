@@ -50,8 +50,7 @@ def extractModel(psfmodel, datacutout, unccutout,correctErrors=True):
 	deg_freedom = np.size(datacutout) - 1 
 	chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(unccutout)) / deg_freedom #*100
 	
-	
-	if (correctErrors and chi2<0.7):
+	if (correctErrors and chi2>2.0):
 		re_unccutout=unccutout*np.sqrt(chi2)
 		model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(re_unccutout)))/ np.sum(np.square(psfmodel))
 		#chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(re_unccutout)) / deg_freedom    #don't update values
@@ -833,9 +832,6 @@ def CombineFieldResults(CatName,wavelength): # #Name options- 'CombCat', 'SegCat
     #return combined catalog
     return catnew
     
-    
-    
-    
 #source coords should be skycoord objects, sep should be an angular quantity e.g., 4*u.arcsec
 def remove_duplicates(cat, sep):
     
@@ -854,9 +850,7 @@ def remove_duplicates(cat, sep):
     #search radius
     r = (2 * np.sin(Angle(sep) / 2.0)).value #search radius
     
-    #initialize counter
     counter=0
-    
     #create array to hold matches
     matchstore=np.zeros(len(cat),dtype=np.int64)
     
@@ -864,17 +858,23 @@ def remove_duplicates(cat, sep):
     for i, matches in enumerate(kdt.query_ball_tree(kdt,r)):
         if len(matches)>1:
             counter+=1
-
+            
             for match in matches:
-                if match!=matches[(match+1)%len(matches)]:
-                    matchstore[match]=matches[(match+1)%len(matches)]+1
+                #print(match)
+                
+                if match == matches[0]:
+                    other=matches[1]
                 else:
-                    matchstore[match]=matches[(match+2)%len(matches)]+1
-
+                    other=matches[0]
+                
+                matchstore[match]=cat['id'][other]
+                
     #store possible crossmatches
     cat['selfXmatch']=matchstore
     print('number of likely duplicates: ', counter)
     
+    
+
     #create keep and remove lists
     keep=[]
     remove=[]
@@ -883,31 +883,40 @@ def remove_duplicates(cat, sep):
     for row in cat:
         if row['selfXmatch']>0:
             #print(row['Master_id'])
-            idx1 = row['id']
-            idx2 = row['selfXmatch']
+            sidx1 = row['id']
+            sidx2 = row['selfXmatch']
 
-            row1=cat[cat['id']==idx1]
-            row2=cat[cat['id']==idx2]
+            row1=cat[cat['id']==sidx1]
+            row2=cat[cat['id']==sidx2]
             
             snr1=row1[colname].data[0]
-            snr2=row2[colname].data[0]
-           
-            if snr1>snr2:
-                keep.append(idx1)
-                remove.append(idx2)
+            if len(row2[colname].data)>0:
+                snr2=row2[colname].data[0]
             else:
-                keep.append(idx2)
-                remove.append(idx1)
-
-    #remove duplicates in lists
-    keep=list(set(keep))
-    remove=list(set(remove))
+                snr2=0
+                
+            if np.ma.is_masked(snr1):
+                snr1=-1
+                
+            if np.ma.is_masked(snr2):
+                snr2=-1
+                
+            if snr1>snr2:
+                keep.append(sidx1)
+            else:
+                remove.append(sidx1)
+    rid=[]
     
-    #remove duplicates in table
-    removeIdx=np.array(remove)-1 #fix zero/one initialization issue
-    cat.remove_rows(removeIdx)
+    for sid in remove:
+        arr=cat['id']==sid
+        tval=np.where(arr)[0]
+        rid.append(tval.data[0])
+        
+    if len(rid)>0:
+        cat.remove_rows(rid)
     
-    return cat
+    return cat, counter    
+    
     
     
     
