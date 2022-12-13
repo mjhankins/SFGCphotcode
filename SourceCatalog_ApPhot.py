@@ -124,8 +124,21 @@ for info in field._registry:
     #define wcs object for header
     wcsmap=WCS(hdu[0].header)
     
-    #create pixel error map by taking sqrt of variance map
-    errormap=np.sqrt(varmap)
+    if not header["PIPELINE"]=='FORCAST_REDUX':
+        print("Error! Pipeline that produced data is not FORCAST_REDUX. Check data format because it may not be compatable with this photometry code.")
+    
+    #talk with James to see if this is going to be best solution moving forward...
+    if header["PIPEVERS"]=='1_5_0':
+        errormap=np.sqrt(varmap) #in this pipeline version the plane is sigma^2
+    elif header["PIPEVERS"]=='2_3_0':
+        errormap=varmap #in this version of the pipeline the plane is just sigma
+    elif header["PIPEVERS"]=='2_5_0':
+        errormap=varmap #in this version of the pipeline the plane is just sigma
+    else:
+        print("pipeline version not recognized...")
+        print("Pipeversion is: "+header["PIPEVERS"])
+        print("Assuming 2nd data plane is sigma - Please check validity of this assumption before proceeding!")
+        errormap=varmap
     
     
     #------------------Updated Background estimation method---------------------------
