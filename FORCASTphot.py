@@ -926,8 +926,8 @@ def createNames(tab):
     latvals=tab['glat'].value
     lonvals=tab['glon'].value
     #convert to strings
-    strings1 = ["%.3f" % lonvals for lonvals in lonvals]
-    strings2 = ["%.3f" % latvals for latvals in latvals]
+    strings1 = ["%.3f" % lonvals for lonvals in lonvals] #updated to 4 decimals because 3 isn't sufficient to distinguish some sources from one another
+    strings2 = ["%.4f" % latvals for latvals in latvals] #updated to 4 decimals because 3 isn't sufficient to distinguish some sources from one another
     #update string 2 to include '+' signs where needed
     s2update=[]
     for string in strings2:
