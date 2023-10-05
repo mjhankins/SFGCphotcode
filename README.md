@@ -1,5 +1,5 @@
 # SFGCphotcode
-## Python code developed for constructing the source catalog for the SOFIA/FORCAST Galactic Center Legacy Program. 
+*Python code developed for constructing the source catalog for the SOFIA/FORCAST Galactic Center Legacy Program.*
 
 The code here includes steps for source detection and photometry on a field by field basis. There are also notebooks for combining the results into the final catalog.
 
