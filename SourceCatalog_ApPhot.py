@@ -37,7 +37,7 @@ from config import dpath, dpathalt, ds9path #import additional common paramters
 
 from config import *
 
-from FORCASTphot import performApPhoto, fitshapes, modelSources
+from FORCASTphot import performApPhoto, modelSources
 
 
 #Specify options for script
@@ -75,7 +75,7 @@ else:
     sys.exit(1)
 
 #rename a few parameters that were just imported. 
-bkgbox=filt.bkgbox
+bkgbox=filt.bkgbox+7 #keep +7 for 25 um
 radii=filt.radii
 r_in=filt.r_in
 r_out=filt.r_out
@@ -139,6 +139,22 @@ for info in field._registry:
         print("Pipeversion is: "+header["PIPEVERS"])
         print("Assuming 2nd data plane is sigma - Please check validity of this assumption before proceeding!")
         errormap=varmap
+        
+    
+    ''' Don't use this without further vetting...
+    #new for testeing... scale errormap by tint. See if this helps with odd chi2 values - MH 5/29
+    from astropy.modeling import models, fitting
+    # define a model for a line
+    line_new = models.Linear1D(slope=-0.0000241, intercept=0.0225)
+    #calc stats
+    _,s2,_=sigma_clipped_stats(errormap)
+    #make normalized map
+    emapnorm=errormap/s2
+    #predict scaling
+    empVal=line_new(header["EXPTIME"])
+    #apply scaling to produce new error map
+    errormap=emapnorm*empVal
+    '''
     
     
     #------------------Updated Background estimation method---------------------------
@@ -155,6 +171,45 @@ for info in field._registry:
     data_ma = np.ma.masked_array(data, mask=maskTPS)
     
     mask_3sigma = make_source_mask(data_ma-bkg, nsigma=3, npixels=3, dilate_size=3, filter_fwhm=3)
+    
+    #optional define custom source masking here...
+    if wavelength==25:
+        if name=='Field50':
+            s=2
+            mask_3sigma[231-s:231+s,211-s:211+s]=True
+            #print('adding source field 50')
+        elif name=='Field39':
+            s=2
+            mask_3sigma[218-s:218+s,102-s:102+s]=True
+            #print('adding source field 39') 
+        elif name=='Field36':
+            s=2
+            mask_3sigma[258-s:258+s,351-s:351+s]=True
+            #print('adding source field 36')  
+        elif name=='Field18':
+            s=2
+            mask_3sigma[251-s:251+s,230-s:230+s]=True
+            mask_3sigma[178-s:178+s,232-s:232+s]=True
+            mask_3sigma[227-s:227+s,172-s:172+s]=True
+            mask_3sigma[186-s:186+s,203-s:203+s]=True
+            
+    if wavelength==37:
+        if name=='Field50':
+            s=3
+            mask_3sigma[258-s:258+s,104-s:104+s]=True
+            mask_3sigma[238-s:238+s,207-s:207+s]=True
+        elif name=='Field18':
+            s=3
+            mask_3sigma[253-s:253+s,221-s:221+s]=True
+            mask_3sigma[223-s:223+s,219-s:219+s]=True
+            mask_3sigma[242-s:242+s,175-s:175+s]=True
+        elif name=='Field01':
+            s=3
+            mask_3sigma[242-s:242+s,204-s:204+s]=True
+            mask_3sigma[180-s:180+s,135-s:135+s]=True
+            mask_3sigma[191-s:191+s,238-s:238+s]=True
+            mask_3sigma[299-s:299+s,147-s:147+s]=True
+            mask_3sigma[131-s:131+s,262-s:262+s]=True
 
     data_ma2 = np.ma.masked_array(data, mask=mask_3sigma)
     
@@ -203,7 +258,7 @@ for info in field._registry:
     mtComb = join(combTab, CombPhotTable, keys='id')
     
     #add shape parameters to table - remove because this is depreciated
-    mtComb=fitshapes(data_bkgsub,mtComb) #optional plot=True for diagnostic plots
+    #mtComb=fitshapes(data_bkgsub,mtComb) #optional plot=True for diagnostic plots
     
     #new model sources script
     mtComb=modelSources(data_bkgsub,errormap,mtComb,header,cutouts=True,cutsize=cutsize)

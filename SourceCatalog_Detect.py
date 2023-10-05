@@ -215,8 +215,11 @@ for info in field._registry:
     tmapnorm=tmap/np.max(tmap) #creating a normalized exposure time map for the mask
     maskTPS=np.where(tmapnorm<0.75,tmapnorm,0).astype('bool')
     
-    mask2=np.zeros(np.shape(maskTPS))
-    mask3=np.zeros(np.shape(maskTPS))
+    #remove any that exist in masked region as defined in the config file
+    if m2lims is not None:
+        mask2=np.zeros(np.shape(maskTPS))
+        for lim in m2lims:
+            mask2[lim[0]:lim[1],lim[2]:lim[3]]=1
 
     #create a single mask from the combination of mask parameters specified in the config file
     if m2lims is not None:
@@ -388,9 +391,9 @@ for info in field._registry:
 
             
     #read in user defined sources if they exist
-    UserFile=name+'_ds9.reg'
-    if os.path.isfile(name+'_ds9.reg'):
-        sourcesDS9=read_ds9(name+'_ds9.reg')
+    userFile=name+'_ds9_'+str(wavelength)+'.reg' #name+'_ds9.reg'
+    if os.path.isfile(userFile):
+        sourcesDS9=read_ds9(userFile)
         
         #print('\n Found User DS9 file \n')
 

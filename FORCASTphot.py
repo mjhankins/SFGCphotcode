@@ -39,59 +39,90 @@ from astropy.utils.exceptions import AstropyUserWarning
 
 
 
-def extractModel(psfmodel, datacutout, unccutout,correctErrors=True):
-	#Normalize psfmodel
-	psfmodel = psfmodel / np.sum(psfmodel)
-	
-	#Compute best-fit flux for model
-	model_flux = np.sum(psfmodel * datacutout) / np.sum(np.square(psfmodel))
-	
-	#Compute chi2 of model fit
-	deg_freedom = np.size(datacutout) - 1 
-	chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(unccutout)) / deg_freedom #*100
-	
-	if (correctErrors and chi2>2.0):
-		re_unccutout=unccutout*np.sqrt(chi2)
-		model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(re_unccutout)))/ np.sum(np.square(psfmodel))
-		#chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(re_unccutout)) / deg_freedom    #don't update values
-	else:
-		model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(unccutout)))/ np.sum(np.square(psfmodel))
-	    
-	return model_flux, model_flux_err, chi2
+def extractModel(psfmodel, datacutout, unccutout,wv,correctErrors=True):
+    #Normalize psfmodel
+    psfmodel = psfmodel / np.sum(psfmodel)
+
+    #Compute best-fit flux for model
+    model_flux = np.sum(psfmodel * datacutout) / np.sum(np.square(psfmodel))
+    
+    unccutout=unccutout/2.0 #chi2 too small - adjust error array estimate to compensate
+    
+    #Compute chi2 of model fit
+    if wv==25:
+        deg_freedom = np.size(datacutout) - 14 
+    else:
+        deg_freedom = np.size(datacutout) - 21
+    chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(unccutout)) / deg_freedom 
+    
+    if (correctErrors and chi2>2.0):
+        re_unccutout=unccutout*np.sqrt(chi2)
+        model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(re_unccutout))) / np.sum(np.square(psfmodel))
+        #chi2 = np.sum(np.square(datacutout - psfmodel * model_flux) / np.square(re_unccutout)) / deg_freedom    #don't update values
+    else:
+        model_flux_err = np.sqrt(np.sum(np.square(psfmodel) * np.square(unccutout))) / np.sum(np.square(psfmodel))
+        
+    return model_flux, model_flux_err, chi2
 
 
 
 
 def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
+    
+    wavelen=tab['wv'][0]
+    
+    if wavelen==25:
+        #print('Wavelength 25')
+        csize=17
+        psfwhm=4.5
+        maxfwhm=10
+        vexlim=12
+    elif wavelen==37:
+        csize=21
+        psfwhm=5.5
+        maxfwhm=12
+        vexlim=14
+        
+    
     csize=17
-    xfit=[]
-    yfit=[]
-    xfiterr=[]
-    yfiterr=[]
-    amp=[]
+    xfitm=[]
+    yfitm=[]
+    mamp=[]
     alpha=[]
     alphaerr=[]
     gamma=[]
     gammaerr=[]
     fwhm=[]
+    fwhmerr=[]
+    xfitg=[]
+    yfitg=[]
+    xfiterr=[]
+    yfiterr=[]
+    gamp=[]
     xfwhm=[]
+    xfwhmerr=[]
     yfwhm=[]
+    yfwhmerr=[]
     elong=[]
     orient=[]
     modelflux=[]
     modelfluxerr=[]
     modelSNRs=[]
     modelchi2=[]
-    fitwarn=[]
+    gfitwarn=[]
+    mfitwarn=[]
     gmodelflux=[]
     gmodelfluxerr=[]
     gmodelSNRs=[]
     gmodelchi2=[]
-    gfitwarn=[]
     modeltype=[]
-    #sourcepixels=[]
+    #fitwarn=[]
+    fdist=[]
+    vex=[]
+
     cimages=np.zeros((len(tab),csize,csize))
-    residuals=np.zeros((len(tab),csize,csize))
+    gresidual=np.zeros((len(tab),csize,csize))
+    mresidual=np.zeros((len(tab),csize,csize))
     cutimgs=np.zeros((len(tab),cutsize,cutsize)) #these are the display cutouts
     pcovmatrix=[]
     
@@ -99,11 +130,14 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
     i=0
     for source in tab:
         
-        try:
-            spos=(source['xcentroid'].value,source['ycentroid'].value)
-        except:
-            print('centroids are missing from table. Using x/y center instead')
-            spos=(source['xcenter'].value,source['ycenter'].value)
+        #not x/y centroid came from fitsources which is depreciated now...
+        #try:
+        #    spos=(source['xcentroid'].value,source['ycentroid'].value)
+        #except:
+        #    print('centroids are missing from table. Using x/y center instead')
+        #    spos=(source['xcenter'].value,source['ycenter'].value)
+        
+        spos=(source['xcenter'].value,source['ycenter'].value)
         
         cut_img=Cutout2D(data,spos,csize,mode='partial',fill_value=0.0,copy=True)
         unc_img=Cutout2D(errorimg,spos,csize,mode='partial',fill_value=0.0,copy=True)
@@ -125,33 +159,48 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
             
             p1 = fit_p1(p1_init, x, y, cimg)
             #print(w[0].message) #debugging to check error messages
-            fitwarn.append(len(w))
+            #fitwarn.append(len(w))
             
 
         if p1.cov_matrix is not None:
             p1cov=np.diag(p1.cov_matrix.cov_matrix)
-            xfiterr.append(p1cov[1])
-            yfiterr.append(p1cov[2])
-            gammaerr.append(p1cov[3])
-            alphaerr.append(p1cov[4])
-            #pcovmatrix.append(p1cov)
-            #print(p1cov)
+            #xfiterr.append(p1cov[1])  #in pixels
+            #yfiterr.append(p1cov[2])  #in pixels
+            gammaerr.append(p1cov[3])  #in pixels
+            alphaerr.append(p1cov[4])  #alpha is unit-less
+            grammaer=p1cov[3] #in pixels
+            mfit=0
+            xfitm.append(p1.x_0.value) #in pixels
+            yfitm.append(p1.y_0.value) #in pixels
+            mamp.append(p1.amplitude.value)
+            alpha.append(p1.alpha.value) #unitless
+            gamma.append(p1.gamma.value) #in pixels
         else:
-            xfiterr.append(-1)
-            yfiterr.append(-1)
-            gammaerr.append(-1)
-            alphaerr.append(-1)
-            #pcovmatrix.append([-1, -1, -1, -1, -1)
+            #xfiterr.append(np.nan)
+            #yfiterr.append(np.nan)
+            gammaerr.append(np.nan)
+            grammaer=np.nan
+            alphaerr.append(np.nan)
+            mfit=1
+            xfitm.append(np.nan) #in pixels
+            yfitm.append(np.nan) #in pixels
+            mamp.append(np.nan)
+            alpha.append(np.nan) #unitless
+            gamma.append(np.nan) #in pixels
         
         mmodel=p1(x, y)
-        resid=cimg.data - mmodel
+        mresid=cimg.data - mmodel
         
-        mflux,mfluxerr,chi2m=extractModel(mmodel,cimg,uimg)
+        mflux,mfluxerr,chi2m=extractModel(mmodel,cimg,uimg,wavelen)
         
         
-        r_effective=(p1.fwhm)/2.355*1.5 #use 1.5 sigma? could be adjusted...
-        noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/mflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(mfluxerr/mflux)**2)
-        modelSNR=mflux/noisecalc
+        r_effective=(p1.fwhm)/2.355*1.645 #use 1.645 sigma? could be adjusted...
+        #etamoffat=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/mflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.005625+(mfluxerr/mflux)**2)
+        #mfluxunc=etamoffat*mflux
+        #modelSNR=mflux/(np.sqrt(2*np.pi)*r_effective*tab['ann_bkg_std'][i])
+        
+        mfluxunc=np.sqrt(2*np.pi)*r_effective*tab['ann_bkg_std'][i]
+        modelSNR=mflux/mfluxunc
         
         
         p2_init = models.Gaussian2D(x_mean=np.int32(csize/2),y_mean=np.int32(csize/2))
@@ -159,119 +208,247 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
         
         with warnings.catch_warnings(record=True) as w2:
             p2 = fit_p2(p2_init, x, y, cimg)
+            #gfitwarn.append(len(w2))
             
-            gfitwarn.append(len(w2))
+        if p2.cov_matrix is not None:
+            xfwhm.append(p2.x_fwhm*0.768) # in arcseconds
+            yfwhm.append(p2.y_fwhm*0.768) # in arcseconds
+            gamp.append(p2.amplitude.value)
+            xfitg.append(p2.x_mean.value)
+            yfitg.append(p2.y_mean.value)
+            p2cov=np.diag(p2.cov_matrix.cov_matrix)
+            xfiterr.append(p2cov[1])
+            yfiterr.append(p2cov[2])
+            xfwhmerr.append(p2cov[3]*0.768) #in arcsec
+            yfwhmerr.append(p2cov[4]*0.768) #in arcsec
+            gfwhmerr=np.sqrt((p2cov[3])**2+(p2cov[4])**2) #in pixels
+            gfit=0
+            gfwhm=np.sqrt(p2.x_fwhm*p2.y_fwhm) # calculate an effective 1D FWHM for the gaussian model   
+        else:
+            xfwhm.append(np.nan)
+            yfwhm.append(np.nan)
+            gamp.append(np.nan)
+            xfitg.append(np.nan)
+            yfitg.append(np.nan)
+            xfiterr.append(np.nan)
+            yfiterr.append(np.nan)
+            xfwhmerr.append(np.nan) #was -1
+            yfwhmerr.append(np.nan) #was -1
+            gfit=1
+            gfwhm=np.nan
+            gfwhmerr=np.nan #was -1
+        
         
         gmodel=p2(x, y)
-        gresid=cimg - gmodel
         
-        gflux,gfluxerr,chi2g=extractModel(gmodel,cimg,uimg)
+        if not np.sum(gmodel)>0: #make dummy psf if model psf is array of zeros 
+            gmodel[7:11,7:11]=1
+            gfit=1
+
+        
+        gresid=cimg - gmodel   
+        
+        gflux,gfluxerr,chi2g=extractModel(gmodel,cimg,uimg,wavelen)
         
         
-        r_effective=np.sqrt(p2.x_fwhm*p2.y_fwhm)/2.355*1.5 #use 1.5 sigma? could be adjusted...
-        noisecalc=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/gflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+(gfluxerr/gflux)**2)
-        gmodelSNR=gflux/noisecalc
+        
+        r_effective=gfwhm/2.355*1.645 #use 1.645 sigma? could be adjusted...
+        #etagauss=np.sqrt(2*np.pi*(r_effective*tab['ann_bkg_std'][i]/gflux)**2+(header['ERRCALF']/header['CALFCTR'])**2+0.005625+(gfluxerr/gflux)**2)
+        #gfluxunc=etagauss*gflux
+        #gmodelSNR=gflux/(np.sqrt(2*np.pi)*r_effective*tab['ann_bkg_std'][i])
+        
+        gfluxunc=np.sqrt(2*np.pi)*r_effective*tab['ann_bkg_std'][i]
+        gmodelSNR=gflux/gfluxunc
         
         if cutouts:
             c2=Cutout2D(data,spos,cutsize,mode='partial',fill_value=0.0,copy=True)
             cutimgs[i,:,:]=c2.data
+            gresidual[i,:,:]=gresid
+            mresidual[i,:,:]=mresid
             
+        
+        
                 
-        #pix_aperture=CircularAperture((p1.x_0.value,p1.y_0.value), r=r_effective*1.2)
-        #source_mask = pix_aperture.to_mask(method='exact')
-        #source_data = source_mask.multiply(data)
-        #sourcedata=source_mask.data
-        #ourcepix=sum(sum(sourcedata>5*tab['ann_bkg_std'][i]))
- 
-
-        xfit.append(p1.x_0.value)
-        yfit.append(p1.y_0.value)
-        amp.append(p1.amplitude.value)
-        alpha.append(p1.alpha.value)
-        gamma.append(p1.gamma.value)
-        fwhm.append(p1.fwhm*0.768) # in arcseconds
-        xfwhm.append(p2.x_fwhm*0.768) # in arcseconds
-        yfwhm.append(p2.y_fwhm*0.768) # in arcseconds
-        
-        if p2.x_fwhm>p2.y_fwhm:
+        if p2.x_fwhm>=p2.y_fwhm:
             elong.append(p2.x_fwhm/p2.y_fwhm)
-        else:
+        elif p2.x_fwhm<p2.y_fwhm:
             elong.append(p2.y_fwhm/p2.x_fwhm)
+        else:
+            elong.append(np.nan)
         
-        orient.append(p2.theta.value)
-        modelflux.append(mflux)
-        modelfluxerr.append(mfluxerr)
-        modelSNRs.append(modelSNR)
-        modelchi2.append(chi2m)
         
-        gmodelflux.append(gflux)
-        gmodelfluxerr.append(gfluxerr)
-        gmodelSNRs.append(gmodelSNR)
-        gmodelchi2.append(chi2g)
+        #initial classification based on model fit performance
+        if grammaer/p1.gamma.value<0.8:
+            if chi2m<(1.1*chi2g) and elong[-1]<1.25 and (p1.fwhm*0.768)<psfwhm:
+                modelflag='m'          
+            else:
+                if (gfwhmerr/gfwhm)<1.0:
+                    modelflag='g'
+                else:
+                    modelflag='a'      
+        elif (gfwhmerr/gfwhm)<1.0:
+            modelflag='g'
+        else:
+            modelflag='a'
+        
+        #adjust model assessment based on chi squared values
+        if modelflag=='g':
+            if chi2m<(1.1*chi2g) and elong[-1]<=1.25 and (p1.fwhm*0.768)<psfwhm and grammaer/p1.gamma.value<0.8:
+                modelflag='m' 
+                
+        if modelflag=='m' and chi2m>4:
+            if chi2g<=4 and (gfwhmerr/gfwhm)<1.0:
+                modelflag='g'
+            else:
+                modelflag='a'
+                
+        if modelflag=='g' and chi2g>4:
+            modelflag='a'
+            
+        
+        #calculate source dist from center and use for flagging
+        msdist=np.sqrt((p2.x_mean.value-np.int32(csize/2))**2+(p2.y_mean.value-np.int32(csize/2))**2)
+        fdist.append(msdist)
+        
+        
+        if modelflag!='a' and msdist>4:
+            modelflag='a'
+            
+        
+        if modelflag!='a' and gfwhm>maxfwhm:
+                modelflag='a'
+                
+
+        
+        #retroactively update model flag if fit wasn't good
+        if modelflag=='g' and gfit==1:
+            modelflag='a'
+        if modelflag=='m' and mfit==1:
+            modelflag='a'
+            
+            
+        
+        #use moffat FWHM on sources marked moffat. 
+        #if gfwhm<=vexlim:
+        
+        if modelflag=='m':
+            fx=p1.fwhm*0.768
+            fxerr=(grammaer/p1.gamma.value)*p1.fwhm*0.768
+        elif modelflag=='g':
+            fx=gfwhm*0.768
+            fxerr=gfwhmerr*0.768
+        elif modelflag=='a':
+            if gfit==0:
+                fx=gfwhm*0.768
+            else:
+                fx=np.nan
+            fxerr=np.nan
+        
+        
+        #append the FWHM values
+        if fx == np.nan:
+            fwhm.append(fx)
+        elif fx<(cutsize-5):
+            fwhm.append(fx)
+        else:
+            fwhm.append(cutsize-5)
+            
+        fwhmerr.append(fxerr)
+        
+        
+        #flag if very extended
+        if fx>vexlim:
+            vex.append(1)
+        else:
+            vex.append(0)
+                    
+        
+        
+        '''# use gaussian FWHM for all fwhm measures
+        if gfit==0:
+            fwhm.append(gfwhm*0.768)
+            
+            if (gfwhmerr/gfwhm)<1.0:
+                fwhmerr.append(gfwhmerr*0.768)
+            else:
+                fwhmerr.append(np.nan)
+                #gfit=1
+        else:
+            fwhm.append(np.nan)
+            fwhmerr.append(np.nan)
+        '''
+            
+        
+        mfitwarn.append(mfit)
+        gfitwarn.append(gfit)
+        
+        modeltype.append(modelflag)
+        
+        if gfit==0:
+            orient.append(p2.theta.value)
+            gmodelflux.append(gflux)
+            gmodelfluxerr.append(gfluxunc)
+            gmodelSNRs.append(gmodelSNR)
+            gmodelchi2.append(chi2g)
+        else:
+            orient.append(np.nan)
+            gmodelflux.append(np.nan)
+            gmodelfluxerr.append(np.nan)
+            gmodelSNRs.append(np.nan)
+            gmodelchi2.append(np.nan)            
+            
+        if mfit==0:    
+            modelflux.append(mflux)
+            modelfluxerr.append(mfluxunc)
+            modelSNRs.append(modelSNR)
+            modelchi2.append(chi2m)
+        else:
+            modelflux.append(np.nan)
+            modelfluxerr.append(np.nan)
+            modelSNRs.append(np.nan)
+            modelchi2.append(np.nan)
+
         #sourcepixels.append(sourcepix)
         i=i+1
-         
-
+        
+            
     #elongation
-    tab['fit_x0']=xfit
-    tab['fit_y0']=yfit
-    tab['fit_x0_err']=xfiterr
-    tab['fit_y0_err']=yfiterr
-    tab['fit_amp']=amp
-    tab['fit_gamma']=gamma
-    tab['fit_gamma_err']=gammaerr
-    tab['fit_alpha']=alpha
-    tab['fit_alpha_err']=alphaerr
-    tab['fit_fwhm']=fwhm
-    tab['fit_xfwhm']=xfwhm
-    tab['fit_yfwhm']=yfwhm
-    tab['fit_elong']=elong
-    tab['fit_orient']=orient
+    tab['fwhm']=fwhm   #was 'fit_fwhm'
+    tab['fwhm_err']=fwhmerr #was 'fit_fwhm_err'
+    tab['elong']=elong #was 'fit_elong'
+    tab['mfit_x0']=xfitm
+    tab['mfit_y0']=yfitm
+    tab['mfit_amp']=mamp
+    tab['mfit_gamma']=gamma
+    tab['mfit_gamma_err']=gammaerr
+    tab['mfit_alpha']=alpha
+    tab['mfit_alpha_err']=alphaerr
+    tab['gfit_x0']=xfitg
+    tab['gfit_y0']=yfitg
+    tab['gfit_x0_err']=xfiterr
+    tab['gfit_y0_err']=yfiterr
+    tab['gfit_amp']=gamp
+    tab['gfit_xfwhm']=xfwhm
+    tab['gfit_xfwhm_err']=xfwhmerr
+    tab['gfit_yfwhm']=yfwhm
+    tab['gfit_yfwhm_err']=yfwhmerr
+    tab['gfit_orient']=orient
     tab['FluxMoffat2D']=modelflux
     tab['FluxMoffatErr']=modelfluxerr
-    tab['ModelSNR']=modelSNRs
+    tab['mModelSNR']=modelSNRs
     tab['Moffat2DChi2']=modelchi2
     tab['FluxGauss2D']=gmodelflux
     tab['FluxGauss2DErr']=gmodelfluxerr
     tab['gModelSNR']=gmodelSNRs
     tab['Gauss2DChi2']=gmodelchi2
-    tab['FitWarningFlag']=fitwarn
+    tab['MFitFlag']=mfitwarn
+    tab['GFitFlag']=gfitwarn
     #tab['SourcePix']=sourcepixels
-    #tab['DataCutout']=cimages
-    #tab['ModelResidual']=residuals
     tab['cutouts']=cutimgs
-    #tab['Model_pcov']=pcovmatrix
-    
-    tab['fit_dist']=np.sqrt((xfit-np.int32(csize/2))**2+(yfit-np.int32(csize/2))**2)
-    
-    scstats=sigma_clipped_stats(modelchi2)
-    rescl=scstats[1]
-    if rescl<0.5:
-        tab['MoffatChi2RE']=np.array(modelchi2)/rescl
-        tab['GaussChi2RE']=np.array(gmodelchi2)/rescl
-    else:
-        tab['MoffatChi2RE']=np.array(modelchi2)
-        tab['GaussChi2RE']=np.array(gmodelchi2)
-    
-    #scstats=sigma_clipped_stats(gmodelchi2)
-    #rescl=scstats[1]+3*scstats[2]
-    #if rescl<0.7:
-    #    tab['GaussChi2RE']=np.array(gmodelchi2)/rescl
-    #else:
-    #    tab['GaussChi2RE']=np.array(gmodelchi2)
-    
-    #classify models
-    for source in tab:
-        if source['MoffatChi2RE']<=2.0:
-            mtype='M'
-            #residuals[i,:,:]=resid
-        elif source['GaussChi2RE']<=2.0:
-            mtype='G'
-            #residuals[i,:,:]=gresid
-        else:
-            mtype='A' 
-                
-        modeltype.append(mtype)
+    tab['gresid']=gresidual
+    tab['mresid']=mresidual
+    tab['fit_dist']=fdist
+    tab['vexFlag']=vex
         
     tab['BestModel']=modeltype
     
@@ -507,12 +684,13 @@ def modelSources(data,errorimg,tab,header,cutouts=False,cutsize=25):
 
 '''
 
-# ----------------- newest stuff --------------------
 
 def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=True):
     
     #define wcs object for header
     wcs=WCS(header)
+    
+    wv=header['WAVELNTH']
 
     #create aperture objects for all specified radii 
     apertures =[SkyCircularAperture(sourceCoords, r=r*0.786*u.arcsec) for r in radii]
@@ -537,6 +715,16 @@ def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=Tr
     bkg_mean=[]
     bkg_std=[]
     appmasks=[]
+    bkgflag=[]
+    
+    if wv==25.2:
+        stdcheck=0.015 #25um
+    elif wv==37.1:
+        stdcheck=0.09 #37um
+    else:
+        print('Filter for '+str(wv)+' is not set up in photometry function...')
+        print('Defaulting value to 0, which will result in all data backround measurements being sigma clipped - this may not be desirable so please be cautious!')
+        stdcheck=0.0
 
     #create mask array for the annuli
     annulus_masks = pix_annulus_aperture.to_mask(method='exact')
@@ -547,28 +735,49 @@ def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=Tr
         maskdata=mask.data
 
         try:
-            #do statistics
+            #do statistics with sig clip based on noise in annulus
             annulus_data_1d = annulus_data[maskdata > 0]
-            meansc, median_sigclip, stdsc = sigma_clipped_stats(annulus_data_1d)
-            bkg_median.append(median_sigclip)
-            bkg_mean.append(meansc)
-            bkg_std.append(stdsc)
+            stdval=np.nanstd(annulus_data_1d)
+            
+            if stdval>stdcheck: 
+                meansc, median_sigclip, stdsc = sigma_clipped_stats(annulus_data_1d,maxiters=3)
+                bkg_median.append(median_sigclip)
+                bkg_mean.append(meansc)
+                bkg_std.append(stdsc)
+                bkgflag.append(1)
+            else:
+                meansc, median_sigclip, stdsc = sigma_clipped_stats(annulus_data_1d,sigma=5,maxiters=1)
+                bkg_median.append(median_sigclip)
+                bkg_mean.append(meansc)
+                bkg_std.append(stdsc)
+                bkgflag.append(0)
+                
             appmasks.append(mask.data)
         except TypeError:
             bkg_median.append(np.nanmedian(annulus_data_1d))
             bkg_mean.append(np.nanmean(annulus_data_1d))
             bkg_std.append(np.nanstd(annulus_data_1d))
             appmasks.append(np.nan)
+            
+            if np.nanstd(annulus_data_1d)>stdcheck:
+                bkgflag.append(1)
+            else:
+                bkgflag.append(0)
+            
+            
+        #bkg_std.append(np.nanstd(annulus_data_1d)) #only for testing...
                 
     #store values in numpy arrays
     bkg_median = np.array(bkg_median)
     bkg_mean = np.array(bkg_mean)
     bkg_std = np.array(bkg_std)
+    bkg_flag=np.array(bkgflag)
 
     #add columns for background information and also background subtracted apertures
     phot_table['ann_bkg_med'] = bkg_median
     phot_table['ann_bkg_mean'] = bkg_mean 
     phot_table['ann_bkg_std'] = bkg_std 
+    phot_table['bkg_flag'] = bkg_flag
 
     
     #information from exposure time maps
@@ -576,6 +785,10 @@ def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=Tr
     texp_mean=[]
     texp_med=[]
     texpmasks=[]
+    edflag=[]
+    
+    #get maximum of exposure time map
+    texpmax=np.nanmax(tmap)
 
     #create mask array for the exp time map apertures
     ap_masks = pix_aperture.to_mask(method='exact')
@@ -590,9 +803,15 @@ def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=Tr
         texp_med.append(median_sigclip)
         texp_mean.append(meansc)
         texpmasks.append(mask.data)
+        
+        if meansc < 0.8*texpmax:
+            edflag.append(1)
+        else:
+            edflag.append(0)
 
-    phot_table['texp_med'] = texp_med
+    #phot_table['texp_med'] = texp_med
     phot_table['texp_mean'] = texp_mean
+    phot_table['edge_flag'] = edflag
     
 
     #caclulate background subtracted photometry and snr for each source
@@ -610,11 +829,26 @@ def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=Tr
         pixarea=pixel_ap.area
         #get background subracted photo by subtracting median annulus value from each pixel in aperture
         phot_table[newcol1]=(phot_table[cname1]/pixarea-phot_table['ann_bkg_med'])*pixarea
-        #calculate noise following equation from forcast photometry cookbook -https://sofia-data-analysis-cookbooks.readthedocs.io/en/latest/FORCAST-photometry_detailed.html - Note there is an added error from the aperture extraction included (cname2)  
-        phot_table[newcol2]=np.sqrt(2*np.pi*(radii[i]*phot_table['ann_bkg_std']/phot_table[newcol1])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.0025+phot_table[cname2]**2)
-        #calculate SNR 
-        phot_table[newcol3]=phot_table[newcol1]/phot_table[newcol2]
+        #calculate noise following equation from forcast photometry cookbook -https://sofia-data-analysis-cookbooks.readthedocs.io/en/latest/FORCAST-photometry_detailed.html - Note there is an added error from the aperture extraction included (cname2)
+        
+        
+        
+        #treat SNR as % error
+        #etavals=np.sqrt(2*np.pi*(radii[i]*phot_table['ann_bkg_std']/phot_table[newcol1])**2+(header['ERRCALF']/header['CALFCTR'])**2+0.005625+(phot_table[cname2]/phot_table[cname1])**2) #upped from 5% to 7.5%
+        #phot_table[newcol2]=etavals*phot_table[newcol1] #note eta is relative error
+        
+        phot_table[newcol2]=np.sqrt(2*np.pi)*radii[i]*phot_table['ann_bkg_std']
+        
+        
+        #calculate SNR - old      
+        #phot_table[newcol3]=phot_table[newcol1]/phot_table[newcol2]
+        #phot_table[newcol3]=phot_table[newcol1]/(np.sqrt(2*np.pi*(radii[i]*phot_table['ann_bkg_std']/phot_table[newcol1])**2+(header['ERRCALF']/header['CALFCTR'])**2+(phot_table[cname2]*2.0/phot_table[cname1])**2))
+        
+        phot_table[newcol3]=phot_table[newcol1]/(np.sqrt(2*np.pi)*radii[i]*phot_table['ann_bkg_std'])
+        
         phot_table[newcol4]=pixarea
+        
+        phot_table['ECF']=header['ERRCALF']/header['CALFCTR']
 
         #rename aperture columns in table to be more descriptive
         rename1='aperture_sum_'+str(radii[i])+'pix'
@@ -644,7 +878,7 @@ def performApPhoto(data,errormap,tmap,header,sourceCoords,radii,rin,rout,plot=Tr
 
 
 
-
+'''
 def fitshapes(image,tab,plot=False,cutouts=False,cutsize=25):
     columns = ['xcentroid', 'ycentroid','fwhm' ,'semimajor_sigma','semiminor_sigma', 'orientation','elongation','covar_sigx2','covar_sigy2']
     
@@ -733,7 +967,7 @@ def fitshapes(image,tab,plot=False,cutouts=False,cutsize=25):
 
     #return input table with new columns from shape fitting
     return tab
-
+'''
 
 
 def CombineFieldResults(CatName,wavelength): # #Name options- 'CombCat', 'SegCat', 'DaoCat'
@@ -747,8 +981,8 @@ def CombineFieldResults(CatName,wavelength): # #Name options- 'CombCat', 'SegCat
         if 'sky_centroid' in cat.columns:
 
             #fix for issue with combining tables with objects as columns
-            cat['RA(J2000)']=cat['sky_centroid'].ra
-            cat['DEC(J2000)']=cat['sky_centroid'].dec
+            cat['RA(J2000)']=cat['sky_centroid'].ra.to_string(u.hour,precision=2)
+            cat['DEC(J2000)']=cat['sky_centroid'].dec.to_string(u.degree,precision=2)
             cat['glon']=cat['sky_centroid'].galactic.l.deg
             cat['glat']=cat['sky_centroid'].galactic.b.deg
             cat.remove_column('sky_centroid')
@@ -756,8 +990,8 @@ def CombineFieldResults(CatName,wavelength): # #Name options- 'CombCat', 'SegCat
         elif 'sky_center' in cat.columns:
             
             #fix for issue with combining tables with objects as columns
-            cat['RA(J2000)']=cat['sky_center'].ra
-            cat['DEC(J2000)']=cat['sky_center'].dec
+            cat['RA(J2000)']=cat['sky_center'].ra.to_string(u.hour,precision=2)
+            cat['DEC(J2000)']=cat['sky_center'].dec.to_string(u.degree,precision=2)
             cat['glon']=cat['sky_center'].galactic.l.deg
             cat['glat']=cat['sky_center'].galactic.b.deg
             cat.remove_column('sky_center')
@@ -781,21 +1015,23 @@ def CombineFieldResults(CatName,wavelength): # #Name options- 'CombCat', 'SegCat
         #print('\nLoading in photometry data from field: ', name)
 
         if name is not startfield:
+            
+            #print(name)
 
             if os.path.exists(name+'_'+str(wavelength)+'um_'+CatName+'.fits'):
                 newtab1=Table.read(name+'_'+str(wavelength)+'um_'+CatName+'.fits')
 
                 if 'sky_centroid' in newtab1.columns:
                     #fix for issue with combining tables with objects as columns
-                    newtab1['RA(J2000)']=newtab1['sky_centroid'].ra
-                    newtab1['DEC(J2000)']=newtab1['sky_centroid'].dec
+                    newtab1['RA(J2000)']=newtab1['sky_centroid'].ra.to_string(u.hour,precision=2)
+                    newtab1['DEC(J2000)']=newtab1['sky_centroid'].dec.to_string(u.degree,precision=2)
                     newtab1['glon']=newtab1['sky_centroid'].galactic.l.deg
                     newtab1['glat']=newtab1['sky_centroid'].galactic.b.deg
                     newtab1.remove_column('sky_centroid')
                 elif 'sky_center' in newtab1.columns:
                     #fix for issue with combining tables with objects as columns
-                    newtab1['RA(J2000)']=newtab1['sky_center'].ra
-                    newtab1['DEC(J2000)']=newtab1['sky_center'].dec
+                    newtab1['RA(J2000)']=newtab1['sky_center'].ra.to_string(u.hour,precision=2)
+                    newtab1['DEC(J2000)']=newtab1['sky_center'].dec.to_string(u.degree,precision=2)
                     newtab1['glon']=newtab1['sky_center'].galactic.l.deg
                     newtab1['glat']=newtab1['sky_center'].galactic.b.deg
                     newtab1.remove_column('sky_center')
@@ -827,7 +1063,7 @@ def CombineFieldResults(CatName,wavelength): # #Name options- 'CombCat', 'SegCat
     catnew['id']=np.linspace(1,len(catnew),len(catnew),dtype=np.int64)
     
     #re-add "sky_centroid" column 
-    catnew['sky_centroid']=SkyCoord(catnew['RA(J2000)'],catnew['DEC(J2000)'],unit=u.deg)
+    catnew['sky_centroid']=SkyCoord(catnew['RA(J2000)'],catnew['DEC(J2000)'],unit=(u.degree,u.hour))
 
     #return combined catalog
     return catnew
