@@ -17,3 +17,9 @@ The final catalog data is available in the 'Data' directory in this repository. 
 
 The catalog paper is currently submitted to ApJ, and upon publication, we will update this page to include links to the paper which provides further description of the files here. 
 
+This code can be referenced using the following information:
+
+[![DOI](https://zenodo.org/badge/376088869.svg)](https://zenodo.org/doi/10.5281/zenodo.11459087)
+
+
+
